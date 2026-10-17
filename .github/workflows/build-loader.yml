@@ -35,11 +35,13 @@ jobs:
           set -x
           git clone --depth 1 --branch edk2-stable202408 https://github.com/tianocore/edk2.git
           cd edk2
-          # 只初始化编译需要的两个子模块, 其余(含已失效的 subhook)一律不碰
-          git submodule update --init --depth 1 -- \
-            BaseTools/Source/C/BrotliCompress/brotli \
-            MdePkg/Library/BaseFdtLib/libfdt || true
-          git submodule status | head -20 || true
+          # MdePkg.dec 引用 MipiSysTLib 的头文件目录, 所以子模块必须拉全。
+          # 但 edk2 里有个失效子模块(UnitTestFrameworkPkg/Library/SubhookLib/subhook
+          # 指向已不存在的仓库), 单独把它设为不更新, 其余递归拉。
+          git config --local submodule.UnitTestFrameworkPkg/Library/SubhookLib/subhook.update none
+          git submodule update --init --recursive --depth 1 --jobs 4 || true
+          echo "--- 仍未初始化的子模块 ---"
+          git submodule status --recursive | awk '$1 ~ /^-/ {print $2}' | head -20 || true
 
       - name: 编译 BaseTools
         run: |
