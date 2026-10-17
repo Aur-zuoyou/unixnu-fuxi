@@ -64,27 +64,42 @@ jobs:
           # 不要加 --skip-rootfs-gen: SimpleInitRootFS.inf 需要 build/rootfs.c
           ./build.sh -d fuxi -r RELEASE 2>&1 | tail -200
 
-      - name: 诊断：探针进没进固件卷
+      - name: 诊断（结果写进 diag.txt, 随 artifact 下载）
         run: |
-          set -x
-          echo "=== DEVICE_DXE_FV_COMPONENTS 出现在哪 ==="
-          grep -rn "DEVICE_DXE_FV_COMPONENTS" edk2-msm/Platform edk2-msm/Silicon 2>/dev/null | head -5
-          echo "=== fuxi.fdf.inc 内容 ==="
-          cat edk2-msm/Platform/Xiaomi/sm8550/fuxi.fdf.inc
-          echo "=== sm8550.fdf 里 FV 与 INF 的结构 ==="
-          grep -n "^\[\|INF \|DEVICE_DXE" edk2-msm/Platform/Qualcomm/sm8550/sm8550.fdf 2>/dev/null | head -40
-          echo "=== 生成的 FV/FD ==="
-          find edk2-msm -maxdepth 5 \( -name "*.Fv" -o -name "*.fv" -o -name "*.fd" \) 2>/dev/null | head -20
-          echo "=== 在 boot-fuxi.img 里找探针 GUID ==="
-          python3 tools/find_probe.py edk2-msm/boot-fuxi.img
+          exec > >(tee edk2-msm/diag.txt) 2>&1
+          echo "### date: $(date -u)"
+          echo "### DEVICE_DXE_FV_COMPONENTS 出现在哪"
+          grep -rn "DEVICE_DXE_FV_COMPONENTS" edk2-msm/Platform edk2-msm/Silicon 2>/dev/null | head -5 || true
+          echo
+          echo "### fuxi.fdf.inc 内容"
+          cat edk2-msm/Platform/Xiaomi/sm8550/fuxi.fdf.inc || true
+          echo
+          echo "### sm8550.fdf 里的 FV / INF / 宏"
+          grep -n "^\[\|INF \|DEVICE_DXE\|!include" edk2-msm/Platform/Qualcomm/sm8550/sm8550.fdf 2>/dev/null | head -60 || true
+          echo
+          echo "### sm8550.fdf 前 80 行"
+          head -80 edk2-msm/Platform/Qualcomm/sm8550/sm8550.fdf 2>/dev/null || true
+          echo
+          echo "### fuxi.dsc 尾部（我们追加的 [Components]）"
+          tail -12 edk2-msm/Platform/Xiaomi/sm8550/fuxi.dsc || true
+          echo
+          echo "### 生成产物列表"
+          find edk2-msm -maxdepth 5 \( -name "*.Fv" -o -name "*.fv" -o -name "*.fd" -o -name "*.img" \) 2>/dev/null | head -30 || true
+          echo
+          echo "### 编译输出里有没有 FuxiProbe"
+          find edk2-msm/Build -iname "*FuxiProbe*" 2>/dev/null | head -10 || true
+          ls -l edk2-msm/Build/*/*/AARCH64/ 2>/dev/null | head -10 || true
+          echo
+          echo "### boot-fuxi.img 里找探针 GUID"
+          python3 tools/find_probe.py edk2-msm/boot-fuxi.img || true
+          echo
+          echo "### diag 结束"
 
-      - name: 检查产物（没有就报错）
+      - name: 检查产物
         run: |
-          set -euo pipefail
-          set -x
           ls -lh edk2-msm/*.img || true
           test -f edk2-msm/boot-fuxi.img
-          ls -l edk2-msm/boot-fuxi.img
+          ls -l edk2-msm/boot-fuxi.img edk2-msm/diag.txt
 
       - name: 上传
         uses: actions/upload-artifact@v4
@@ -93,4 +108,5 @@ jobs:
           path: |
             edk2-msm/boot-fuxi.img
             edk2-msm/uefi-fuxi*.img
+            edk2-msm/diag.txt
           if-no-files-found: error
