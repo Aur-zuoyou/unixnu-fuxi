@@ -3,8 +3,11 @@ name: build-loader
 # 目的: 本机没有任何 aarch64 工具链(已验证), 所以用 GitHub 的机器编。
 # 推上去 → Actions 跑 → 从 Artifacts 下载 FuxiLoader.efi。
 #
-# 注意: 这份 workflow 没有在本地验证过(本地无法跑 GitHub Actions),
-# 如果某一步失败, 大概率是 apt 包名或 edk2 tag 变了, 按报错改即可。
+# 踩过的坑:
+#   1. edk2 里有失效子模块(UnitTestFrameworkPkg/Library/SubhookLib/subhook),
+#      `git submodule update --init` 不带路径会整步失败 —— 必须显式指定路径。
+#   2. BaseTools 要先单独编一次。
+#   3. AARCH64 交叉前缀用环境变量传, 比改 Conf 文件稳。
 
 on:
   push:
@@ -21,6 +24,7 @@ jobs:
 
       - name: 安装依赖
         run: |
+          set -x
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential uuid-dev nasm python3 acpica-tools \
@@ -28,19 +32,35 @@ jobs:
 
       - name: 拉 edk2
         run: |
+          set -x
           git clone --depth 1 --branch edk2-stable202408 https://github.com/tianocore/edk2.git
           cd edk2
+          # 只初始化编译需要的两个子模块, 其余(含已失效的 subhook)一律不碰
           git submodule update --init --depth 1 -- \
-            MdePkg/Library/BaseLib/BaseLib.inf 2>/dev/null || true
-          git submodule update --init --depth 1
+            BaseTools/Source/C/BrotliCompress/brotli \
+            MdePkg/Library/BaseFdtLib/libfdt || true
+          git submodule status | head -20 || true
+
+      - name: 编译 BaseTools
+        run: |
+          set -x
+          cd edk2
+          make -C BaseTools -j"$(nproc)"
 
       - name: 编译 FuxiLoader
         run: |
+          set -x
           cd edk2
-          source edksetup.sh BaseTools >/dev/null
+          source edksetup.sh BaseTools
           export PACKAGES_PATH="$PWD:$GITHUB_WORKSPACE"
-          sed -i 's|^GCC5_AARCH64_PREFIX.*|GCC5_AARCH64_PREFIX = aarch64-linux-gnu-|' Conf/toolchain.txt
-          build -p "$GITHUB_WORKSPACE/loader/FuxiLoader.dsc" -a AARCH64 -t GCC5 -b RELEASE
+          export GCC5_AARCH64_PREFIX=aarch64-linux-gnu-
+          build -p "$GITHUB_WORKSPACE/loader/FuxiLoader.dsc" -a AARCH64 -t GCC5 -b RELEASE -n "$(nproc)"
+
+      - name: 检查产物
+        run: |
+          set -x
+          find edk2/Build -iname "*.efi" | head
+          ls -l edk2/Build/FuxiLoader/RELEASE_GCC5/AARCH64/ || true
 
       - name: 上传产物
         uses: actions/upload-artifact@v4

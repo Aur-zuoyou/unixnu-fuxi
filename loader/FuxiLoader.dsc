@@ -1,11 +1,12 @@
 ## @file
 #  FuxiLoader 平台描述文件
 #
-#  用法(在 edk2 源码树里):
+#  用法(在 edk2 源码树里, PACKAGES_PATH 指向本仓库根):
 #    export PACKAGES_PATH=$PWD:$PWD/..
 #    build -p ../loader/FuxiLoader.dsc -a AARCH64 -t GCC5 -b RELEASE
 #
-#  说明: 这是一个"单组件平台", 只为编出一个 EFI Application, 不需要完整平台描述。
+#  说明: 这是"单组件平台", 只为编出一个 EFI Application。
+#  只保留 Loader.c 真正用到的库 —— 多余条目会在编译期报"找不到"或浪费排查时间。
 ##
 
 [Defines]
@@ -28,15 +29,6 @@
   UefiBootServicesTableLib|MdePkg/Library/UefiBootServicesTableLib/UefiBootServicesTableLib.inf
   UefiLib|MdePkg/Library/UefiLib/UefiLib.inf
   UefiApplicationEntryPoint|MdePkg/Library/UefiApplicationEntryPoint/UefiApplicationEntryPoint.inf
-  UefiRuntimeServicesTableLib|MdePkg/Library/UefiRuntimeServicesTableLib/UefiRuntimeServicesTableLib.inf
-  DevicePathLib|MdePkg/Library/UefiDevicePathLib/UefiDevicePathLib.inf
-  FileHandleLib|MdePkg/Library/UefiFileHandleLib/UefiFileHandleLib.inf
-
-[PcdsFixedAtBuild]
-  gEfiMdePkgTokenSpaceGuid.PcdDebugPropertyMask|0x0
-  gEfiMdePkgTokenSpaceGuid.PcdDebugPrintErrorLevel|0x80000000
-  gEfiMdePkgTokenSpaceGuid.PcdMaximumUnicodeStringLength|1000000
-  gEfiMdePkgTokenSpaceGuid.PcdMaximumAsciiStringLength|1000000
 
 [Components]
   loader/FuxiLoader.inf

@@ -11,7 +11,8 @@
     x0 = 设备树物理地址
     其余通用寄存器清零, MMU 状态由双方约定
 
-  注意: 本文件尚未编译验证 (本机无 aarch64 工具链), 见 README.md 的构建步骤。
+  注意: 本文件的编译由 .github/workflows/build-loader.yml 在 GitHub 上完成;
+        本机没有 aarch64 工具链, 只能静态检查。
 **/
 
 #include <Uefi.h>
@@ -22,6 +23,7 @@
 #include <Library/PrintLib.h>
 #include <Protocol/LoadedImage.h>
 #include <Protocol/SimpleFileSystem.h>
+#include <Guid/FileInfo.h>
 
 #define DT_NAME      L"\\fuxi.dtb"
 #define PAYLOAD_NAME L"\\payload.bin"
