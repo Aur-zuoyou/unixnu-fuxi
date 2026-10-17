@@ -51,14 +51,20 @@ jobs:
           mkdir -p "$probe"
           cp loader/Probe.c loader/Probe.inf "$probe"/
 
-          # ① [Components] 必须插进"已有的"段里。
-          #    新追加一个 [Components] 段会被静默忽略(DSC 不允许重复段)。
-          comp=$(grep -rl "^\[Components\]" edk2-msm/Platform/Qualcomm/sm8550/ edk2-msm/Silicon/Qualcomm/ 2>/dev/null | head -1)
-          [ -n "$comp" ] || comp=edk2-msm/Platform/Qualcomm/sm8550/sm8550.dsc
-          echo "components file: $comp"
-          sed -i '0,/^\[Components\]/s//[Components]\n  Platform\/Xiaomi\/sm8550\/probe\/Probe.inf/' "$comp"
-          echo "--- 确认 Components ---"
-          grep -n -A3 "^\[Components\]" "$comp" | head -8
+          # ① [Components] 必须插进"已有的"段里; 新追加一个段会被静默忽略。
+          #    注意: 这个段可能在 .dsc, 也可能在被 include 的 .inc 里, 所以扫宽一点。
+          set +e
+          comp=$(grep -rl '^\[Components' edk2-msm/Platform/Qualcomm edk2-msm/Silicon/Qualcomm 2>/dev/null | head -1)
+          set -e
+          echo "components file: [$comp]"
+          if [ -z "$comp" ]; then
+            echo "!! 没找到 [Components] 段, 退回追加到 fuxi.dsc (可能仍无效, 见 diag)"
+            printf '\n[Components]\n  Platform/Xiaomi/sm8550/probe/Probe.inf\n' >> edk2-msm/Platform/Xiaomi/sm8550/fuxi.dsc
+          else
+            sed -i '0,/^\[Components/s//&\n  Platform\/Xiaomi\/sm8550\/probe\/Probe.inf/' "$comp"
+            echo "--- 确认 Components ---"
+            grep -n -A4 '^\[Components' "$comp" | head -10
+          fi
 
           # ② FDF: sm8550.fdf 不使用 DEVICE_DXE_FV_COMPONENTS, 必须直接插进 [FV.FvMain]
           sed -i '/INF MdeModulePkg\/Universal\/BdsDxe\/BdsDxe.inf/a\  INF Platform/Xiaomi/sm8550/probe/Probe.inf' \
@@ -103,6 +109,9 @@ jobs:
           echo
           echo "### fuxi.dsc 尾部（我们追加的 [Components]）"
           tail -12 edk2-msm/Platform/Xiaomi/sm8550/fuxi.dsc || true
+          echo
+          echo "### 所有含 [Components 的文件"
+          grep -rln '^\[Components' edk2-msm/Platform edk2-msm/Silicon 2>/dev/null | head -10 || true
           echo
           echo "### 所有引用了 probe/Probe.inf 的位置"
           grep -rn "probe/Probe.inf" edk2-msm/Platform edk2-msm/Silicon 2>/dev/null | head -10 || true
