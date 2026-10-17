@@ -50,14 +50,10 @@ jobs:
           probe=edk2-msm/Platform/Xiaomi/sm8550/probe
           mkdir -p "$probe"
           cp loader/Probe.c loader/Probe.inf "$probe"/
-          cat >> edk2-msm/Platform/Xiaomi/sm8550/fuxi.dsc <<'EOF'
-
-[Components]
-  Platform/Xiaomi/sm8550/probe/Probe.inf
-EOF
+          printf '\n[Components]\n  Platform/Xiaomi/sm8550/probe/Probe.inf\n' >> edk2-msm/Platform/Xiaomi/sm8550/fuxi.dsc
           echo "INF Platform/Xiaomi/sm8550/probe/Probe.inf" >> edk2-msm/Platform/Xiaomi/sm8550/fuxi.fdf.inc
           echo "--- fuxi.fdf.inc ---"; cat edk2-msm/Platform/Xiaomi/sm8550/fuxi.fdf.inc || true
-          echo "--- fuxi.dsc 尾部 ---"; tail -8 edk2-msm/Platform/Xiaomi/sm8550/fuxi.dsc
+          echo "--- fuxi.dsc tail ---"; tail -8 edk2-msm/Platform/Xiaomi/sm8550/fuxi.dsc
 
       - name: 编 fuxi UEFI
         run: |
