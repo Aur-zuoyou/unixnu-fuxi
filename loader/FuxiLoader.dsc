@@ -29,5 +29,10 @@
   UefiBootServicesTableLib|MdePkg/Library/UefiBootServicesTableLib/UefiBootServicesTableLib.inf
   UefiApplicationEntryPoint|MdePkg/Library/UefiApplicationEntryPoint/UefiApplicationEntryPoint.inf
 
+[BuildOptions]
+  # Ubuntu 的 aarch64-linux-gnu-gcc 默认开着 -fstack-protector-strong,
+  # 而 EDK2 不提供 __stack_chk_fail, 链接会炸。
+  GCC:*_*_AARCH64_CC_FLAGS = -fno-stack-protector
+
 [Components]
   loader/FuxiLoader.inf
