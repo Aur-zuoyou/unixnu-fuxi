@@ -60,7 +60,8 @@ jobs:
             echo "!! 沿 include 链没找到 [Components, 构建几乎肯定失败"
             exit 1
           fi
-          sed -i '0,/^\[[Cc]omponents/s//&\n  Platform\/Xiaomi\/sm8550\/probe\/Probe.inf/' "$comp"
+          # 用 Python 插入: sed 的 & 不含结尾的 ], 会把段头写坏
+          python3 tools/patch_dsc.py "$comp" Platform/Xiaomi/sm8550/probe/Probe.inf
           echo "--- 确认 Components ---"
           grep -n -A5 -i '^\[components' "$comp" | head -12
 
