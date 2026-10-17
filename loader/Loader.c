@@ -31,6 +31,22 @@
 
 STATIC EFI_FILE_HANDLE gRootDir = NULL;
 
+/* 兜底: Ubuntu 的 aarch64-linux-gnu-gcc 可能默认开启栈保护,
+   而 EDK2 的运行时没有 __stack_chk_fail。DSC 里已经关了
+   -fstack-protector, 这里再给一份空实现, 双保险。 */
+#if defined(__GNUC__) && !defined(__clang__)
+UINT64  __stack_chk_guard = 0x0A0B0C0D0E0F1011ULL;
+
+VOID
+__stack_chk_fail (
+  VOID
+  )
+{
+  for ( ; ; ) {
+  }
+}
+#endif
+
 /** 格式化后直接打到控制台, 不依赖 Boot Services 之外的任何库 */
 STATIC
 VOID
