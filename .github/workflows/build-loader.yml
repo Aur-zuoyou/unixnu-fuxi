@@ -12,7 +12,6 @@ name: build-loader
 on:
   push:
     paths:
-      - "loader/**"
       - ".github/workflows/build-loader.yml"
   workflow_dispatch:
 

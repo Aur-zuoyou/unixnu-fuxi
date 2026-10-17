@@ -12,6 +12,7 @@ name: build-fuxi-uefi
 on:
   push:
     paths:
+      - "loader/**"
       - ".github/workflows/build-fuxi-uefi.yml"
   workflow_dispatch:
 
