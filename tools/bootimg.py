@@ -54,6 +54,15 @@ def _fdt_summary(blob: bytes) -> str:
 def parse_boot(data: bytes) -> dict:
     if data[:8] != BOOT_MAGIC:
         raise ImgError("不是 boot.img (magic=%r)" % data[:8])
+    if len(data) < 64:
+        raise ImgError("文件太短: %d 字节" % len(data))
+
+    # v0-v2 与 v3/v4 是两套完全不同的头部布局, 先判断是哪一套:
+    #   v0-v2 在偏移 36 有 page_size(512~65536)
+    #   v3/v4 的偏移 36 落在 reserved 区, 恒为 0
+    cand_page, = struct.unpack("<I", data[36:40])
+    if 512 <= cand_page <= 65536:
+        return _parse_boot_legacy(data, cand_page)
 
     (kernel_size, ramdisk_size, os_version,
      header_size) = struct.unpack("<4I", data[8:24])
@@ -74,6 +83,7 @@ def parse_boot(data: bytes) -> dict:
         page = PAGE
         pos = align(header_size, page)
         out["kernel"] = data[pos:pos + kernel_size]
+        out["kernel_gzip"] = out["kernel"][:2] == b"\x1f\x8b"
         pos = align(pos + kernel_size, page)
         out["ramdisk"] = data[pos:pos + ramdisk_size]
         pos = align(pos + ramdisk_size, page)
@@ -83,12 +93,62 @@ def parse_boot(data: bytes) -> dict:
             out["signature"] = data[pos:pos + sig_size]
         return out
 
-    if header_version in (0, 1, 2):
-        raise ImgError(
-            "boot header v%d 暂不支持(本工具只做 v3/v4)。"
-            "fuxi 是 v4, 如果你拿到的是 v2, 说明镜像来源不对。" % header_version)
-
     raise ImgError("未知 boot header 版本: %d" % header_version)
+
+
+# ---------------------------------------------------------------- boot v0/v1/v2
+
+def _parse_boot_legacy(data: bytes, page: int) -> dict:
+    """boot header v0/v1/v2 —— Renegade 的 boot-<device>.img 用的就是 v1。
+
+    头部 1632/1648/1660 字节, 按 page_size 对齐后依次是
+    kernel / ramdisk / second / recovery_dtbo(v1+) / dtb(v2+)。
+    """
+    u32 = lambda off: struct.unpack("<I", data[off:off + 4])[0]
+
+    kernel_size = u32(8)
+    kernel_addr = u32(12)
+    ramdisk_size = u32(16)
+    ramdisk_addr = u32(20)
+    second_size = u32(24)
+    header_version = u32(40)
+    if header_version > 2:
+        raise ImgError("偏移 36 像 page_size 但 header_version=%d, 格式可疑" % header_version)
+
+    out = {
+        "kind": "boot",
+        "header_version": header_version,
+        "page_size": page,
+        "kernel_size": kernel_size,
+        "kernel_addr": "0x%x" % kernel_addr,
+        "ramdisk_size": ramdisk_size,
+        "ramdisk_addr": "0x%x" % ramdisk_addr,
+        "second_size": second_size,
+        "os_version": "0x%08x" % u32(44),
+        "name": _cstr(data[48:64]),
+        "cmdline": _cstr(data[64:576]),
+    }
+
+    pos = align(page, page)
+    out["kernel"] = data[pos:pos + kernel_size]
+    out["kernel_gzip"] = out["kernel"][:2] == b"\x1f\x8b"
+    pos = align(pos + kernel_size, page)
+    out["ramdisk"] = data[pos:pos + ramdisk_size]
+    pos = align(pos + ramdisk_size, page)
+    out["second"] = data[pos:pos + second_size]
+    pos = align(pos + second_size, page)
+
+    if header_version >= 1 and len(data) >= 1648:
+        rec_size = u32(1632)
+        out["recovery_dtbo_size"] = rec_size
+        out["recovery_dtbo"] = data[pos:pos + rec_size]
+        pos = align(pos + rec_size, page)
+
+    if header_version >= 2 and len(data) >= 1660:
+        dtb_size = u32(1648)
+        out["dtb"] = data[pos:pos + dtb_size]
+
+    return out
 
 
 # ---------------------------------------------------------------- vendor_boot

@@ -184,15 +184,40 @@ def test_rejects_bad_input():
         else:
             raise AssertionError("坏 magic 应当抛错")
 
-    # v2 要明确拒绝, 而不是解出错数据
-    v2 = bytearray(make_boot_v4(b"k", b"r"))
-    struct.pack_into("<I", v2, 40, 2)
+    # 未知版本要明确拒绝, 而不是解出错数据
+    bad = bytearray(make_boot_v4(b"k", b"r"))
+    struct.pack_into("<I", bad, 40, 7)
     try:
-        B.parse_boot(bytes(v2))
+        B.parse_boot(bytes(bad))
     except B.ImgError as exc:
-        assert "v2" in str(exc)
+        assert "7" in str(exc)
     else:
-        raise AssertionError("v2 应当明确报错")
+        raise AssertionError("未知版本应当报错")
+
+
+@test
+def test_boot_v1_legacy():
+    """Renegade 的 boot-<device>.img 是 v1: 我们要能认出来。"""
+    page = 2048
+    kernel = b"K" * 3000
+    hdr = bytearray(page)
+    hdr[0:8] = b"ANDROID!"
+    struct.pack_into("<I", hdr, 8, len(kernel))       # kernel_size
+    struct.pack_into("<I", hdr, 12, 0x10000000)       # kernel_addr
+    struct.pack_into("<I", hdr, 16, 1)                # ramdisk_size = 1 (占位)
+    struct.pack_into("<I", hdr, 20, 0x10000000)       # ramdisk_addr
+    struct.pack_into("<I", hdr, 36, page)             # page_size
+    struct.pack_into("<I", hdr, 40, 1)                # header_version
+    struct.pack_into("<I", hdr, 1632, 0)              # recovery_dtbo_size
+    struct.pack_into("<I", hdr, 1644, 1648)           # header_size
+    blob = bytes(hdr) + kernel + b"\0" * (page - len(kernel) % page if len(kernel) % page else 0)
+
+    info = B.parse_boot(blob)
+    assert info["header_version"] == 1
+    assert info["page_size"] == page
+    assert info["kernel_size"] == len(kernel)
+    assert info["kernel"] == kernel, "kernel 抽取位置不对"
+    assert info["ramdisk_size"] == 1
 
 
 # ---------------------------------------------------------------- overlay 合并
