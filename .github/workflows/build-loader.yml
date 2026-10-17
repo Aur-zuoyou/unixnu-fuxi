@@ -47,6 +47,12 @@ jobs:
           cd edk2
           make -C BaseTools -j"$(nproc)"
 
+      - name: 装 python 依赖（edk2 的 build 脚本可能要用）
+        run: |
+          set -x
+          python3 -m pip install --upgrade pip || true
+          [ -f edk2/pip-requirements.txt ] && python3 -m pip install -r edk2/pip-requirements.txt || true
+
       - name: 编译 FuxiLoader
         run: |
           set -x

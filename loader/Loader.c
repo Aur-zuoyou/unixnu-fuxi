@@ -4,19 +4,18 @@
 
   当前职责:
     1. 打开 ESP 上的 fuxi.dtb 与 payload.bin, 读进内存
-    2. 打印内存图 / 当前异常等级 / 载荷地址
-    3. (可选) ExitBootServices 后按 fuxi 的交接约定跳转
+    2. 打印当前异常等级 / 内存图 / 载荷地址
+    3. (可选) ExitBootServices 后按交接约定跳转
 
   交接约定 (待真机验证, 见 docs/boot-chain.md):
-    x0 = 设备树物理地址
-    其余通用寄存器清零, MMU 状态由双方约定
+    x0 = 设备树物理地址, 其余通用寄存器清零, MMU 状态由双方约定
 
-  注意: 本文件的编译由 .github/workflows/build-loader.yml 在 GitHub 上完成;
-        本机没有 aarch64 工具链, 只能静态检查。
+  设计上刻意不用 UefiLib: 它的 Print() 背后拖着 DevicePathLib / HiiLib /
+  UefiRuntimeServicesTableLib 一整串依赖, 在"单组件平台"里会把 DSC 拖崩。
+  这里直接用 BasePrintLib + ConOut, 依赖只剩 BaseLib/PrintLib/MemoryAllocationLib。
 **/
 
 #include <Uefi.h>
-#include <Library/UefiLib.h>
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/MemoryAllocationLib.h>
 #include <Library/BaseMemoryLib.h>
@@ -28,8 +27,29 @@
 #define DT_NAME      L"\\fuxi.dtb"
 #define PAYLOAD_NAME L"\\payload.bin"
 #define MAX_LOAD     (64u * 1024u * 1024u)
+#define LOG_BUF      512
 
 STATIC EFI_FILE_HANDLE gRootDir = NULL;
+
+/** 格式化后直接打到控制台, 不依赖 Boot Services 之外的任何库 */
+STATIC
+VOID
+Log (
+  IN CONST CHAR16  *Fmt,
+  ...
+  )
+{
+  VA_LIST  Args;
+  CHAR16   Buf[LOG_BUF];
+
+  VA_START (Args, Fmt);
+  UnicodeVSPrint (Buf, sizeof (Buf), Fmt, Args);
+  VA_END (Args);
+
+  if (gST != NULL && gST->ConOut != NULL) {
+    gST->ConOut->OutputString (gST->ConOut, Buf);
+  }
+}
 
 STATIC
 UINT64
@@ -48,8 +68,8 @@ OpenRoot (
   IN EFI_HANDLE ImageHandle
   )
 {
-  EFI_STATUS                  Status;
-  EFI_LOADED_IMAGE_PROTOCOL  *Image;
+  EFI_STATUS                       Status;
+  EFI_LOADED_IMAGE_PROTOCOL       *Image;
   EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *Fs;
 
   Status = gBS->HandleProtocol (ImageHandle, &gEfiLoadedImageProtocolGuid, (VOID **) &Image);
@@ -90,11 +110,13 @@ ReadWholeFile (
     File->Close (File);
     return EFI_LOAD_ERROR;
   }
+
   Info = AllocatePool (InfoSize);
   if (Info == NULL) {
     File->Close (File);
     return EFI_OUT_OF_RESOURCES;
   }
+
   Status = File->GetInfo (File, &gEfiFileInfoGuid, &InfoSize, Info);
   if (EFI_ERROR (Status) || Info->FileSize == 0 || Info->FileSize > MAX_LOAD) {
     FreePool (Info);
@@ -104,7 +126,8 @@ ReadWholeFile (
 
   Pages  = EFI_SIZE_TO_PAGES ((UINTN) Info->FileSize);
   *Size  = Pages * EFI_PAGE_SIZE;
-  Status = gBS->AllocatePages (AllocateAnyPages, EfiLoaderData, Pages, (EFI_PHYSICAL_ADDRESS *) Buffer);
+  Status = gBS->AllocatePages (AllocateAnyPages, EfiLoaderData, Pages,
+                               (EFI_PHYSICAL_ADDRESS *) Buffer);
   FreePool (Info);
   if (EFI_ERROR (Status)) {
     File->Close (File);
@@ -123,18 +146,18 @@ LeaveBootServices (
   IN EFI_HANDLE ImageHandle
   )
 {
-  EFI_STATUS               Status;
-  UINTN                    MapSize = 0;
-  UINTN                    MapKey;
-  UINTN                    DescSize;
-  UINT32                   DescVer;
-  EFI_MEMORY_DESCRIPTOR   *Map = NULL;
-  UINTN                    Try;
+  EFI_STATUS              Status = EFI_SUCCESS;
+  UINTN                   MapSize = 0;
+  UINTN                   MapKey;
+  UINTN                   DescSize;
+  UINT32                  DescVer;
+  EFI_MEMORY_DESCRIPTOR  *Map = NULL;
+  UINTN                   Try;
 
   for (Try = 0; Try < 4; Try++) {
     MapSize = 0;
     Status  = gBS->GetMemoryMap (&MapSize, Map, &MapKey, &DescSize, &DescVer);
-    if (Status != EFI_BUFFER_TOO_SMALL && EFI_ERROR (Status)) {
+    if (EFI_ERROR (Status) && Status != EFI_BUFFER_TOO_SMALL) {
       return Status;
     }
     if (Map != NULL) {
@@ -160,8 +183,8 @@ LeaveBootServices (
 STATIC
 VOID
 JumpToPayload (
-  IN VOID   *Dt,
-  IN UINT64  Entry
+  IN VOID    *Dt,
+  IN UINT64   Entry
   )
 {
   __asm__ __volatile__ (
@@ -183,40 +206,44 @@ UefiMain (
   )
 {
   EFI_STATUS  Status;
-  VOID       *Dt     = NULL;
-  UINTN       DtSize = 0;
-  VOID       *Payload = NULL;
+  VOID       *Dt          = NULL;
+  UINTN       DtSize      = 0;
+  VOID       *Payload     = NULL;
   UINTN       PayloadSize = 0;
 
-  Print (L"[fuxi-loader] 启动, CurrentEL = EL%Lu\n", CurrentEl ());
+  (VOID) SystemTable;
+
+  Log (L"[fuxi-loader] 启动, CurrentEL = EL%Lu\n", CurrentEl ());
 
   Status = OpenRoot (ImageHandle);
   if (EFI_ERROR (Status)) {
-    Print (L"[fuxi-loader] 打不开 ESP 根目录: %r\n", Status);
+    Log (L"[fuxi-loader] 打不开 ESP 根目录: %r\n", Status);
     return Status;
   }
 
   Status = ReadWholeFile (DT_NAME, &Dt, &DtSize);
   if (EFI_ERROR (Status)) {
-    Print (L"[fuxi-loader] 读取 %s 失败: %r\n", DT_NAME, Status);
+    Log (L"[fuxi-loader] 读取 %s 失败: %r\n", DT_NAME, Status);
     return Status;
   }
-  Print (L"[fuxi-loader] 设备树 @ 0x%Lx (%Lu 字节)\n", (UINT64) (UINTN) Dt, (UINT64) DtSize);
+  Log (L"[fuxi-loader] 设备树 @ 0x%Lx (%Lu 字节)\n", (UINT64) (UINTN) Dt, (UINT64) DtSize);
 
   Status = ReadWholeFile (PAYLOAD_NAME, &Payload, &PayloadSize);
   if (EFI_ERROR (Status)) {
-    Print (L"[fuxi-loader] 没有 %s, 只做自检后退出: %r\n", PAYLOAD_NAME, Status);
+    Log (L"[fuxi-loader] 没有 %s, 只做自检后退出: %r\n", PAYLOAD_NAME, Status);
     return EFI_SUCCESS;
   }
-  Print (L"[fuxi-loader] 载荷   @ 0x%Lx (%Lu 字节)\n", (UINT64) (UINTN) Payload, (UINT64) PayloadSize);
+  Log (L"[fuxi-loader] 载荷   @ 0x%Lx (%Lu 字节)\n",
+       (UINT64) (UINTN) Payload, (UINT64) PayloadSize);
 
+  Log (L"[fuxi-loader] ExitBootServices ...\n");
   Status = LeaveBootServices (ImageHandle);
   if (EFI_ERROR (Status)) {
-    Print (L"[fuxi-loader] ExitBootServices 失败: %r\n", Status);
+    Log (L"[fuxi-loader] ExitBootServices 失败: %r\n", Status);
     return Status;
   }
 
-  /* 之后不能再调用任何 Boot Services, 包括 Print */
+  /* 之后不能再调用任何 Boot Services, 包括 Log */
   JumpToPayload (Dt, (UINT64) (UINTN) Payload);
   return EFI_SUCCESS;
 }
