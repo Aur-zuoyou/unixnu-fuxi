@@ -1,0 +1,15 @@
+# 从固件/设备导出的中间产物（可用 tools/ 里的脚本重新生成）
+rom/out/
+
+# adb/fastboot 工具与临时文件
+scripts/adb-platform-tools-latest-windows/
+scripts/_tmp/
+
+# Python
+__pycache__/
+*.pyc
+
+# 编辑器
+.vscode/
+.idea/
+*.log
