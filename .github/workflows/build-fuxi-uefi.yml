@@ -47,7 +47,8 @@ jobs:
           set -x
           cd edk2-msm
           export CROSS_COMPILE=aarch64-linux-gnu-
-          ./build.sh -d fuxi --skip-rootfs-gen -r RELEASE 2>&1 | tail -200
+          # 不要加 --skip-rootfs-gen: SimpleInitRootFS.inf 需要 build/rootfs.c
+          ./build.sh -d fuxi -r RELEASE 2>&1 | tail -200
 
       - name: 检查产物（没有就报错）
         run: |
