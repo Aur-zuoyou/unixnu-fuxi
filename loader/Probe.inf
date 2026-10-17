@@ -1,5 +1,9 @@
 ## @file
-#  fuxi 探针 v7 (DXE 驱动, 用 ConOut 反复打印)
+#  fuxi 探针 v8 (DXE 驱动, Depex 依赖 GOP)
+#
+#  关键: Depex 不是 TRUE, 而是 gEfiGraphicsOutputProtocolGuid。
+#  这样驱动会在"帧缓冲可用"之后才被加载, 入口处即可刷屏/打印,
+#  不再依赖定时器(早期根本用不了)。
 ##
 
 [Defines]
@@ -7,7 +11,7 @@
   BASE_NAME                      = FuxiProbe
   FILE_GUID                      = 9c4e2a71-3d85-4f0b-8a6e-1b7d5c2e9f34
   MODULE_TYPE                    = DXE_DRIVER
-  VERSION_STRING                 = 0.7
+  VERSION_STRING                 = 0.8
   ENTRY_POINT                    = ProbeEntry
 
 [Sources]
@@ -16,12 +20,16 @@
 [Packages]
   MdePkg/MdePkg.dec
 
+[Protocols]
+  gEfiGraphicsOutputProtocolGuid
+
 [LibraryClasses]
   UefiDriverEntryPoint
   UefiBootServicesTableLib
   BaseLib
+  BaseMemoryLib
   PrintLib
   DebugLib
 
 [Depex]
-  TRUE
+  gEfiGraphicsOutputProtocolGuid
