@@ -63,8 +63,15 @@ jobs:
           # ② FDF: sm8550.fdf 不使用 DEVICE_DXE_FV_COMPONENTS, 必须直接插进 [FV.FvMain]
           sed -i '/INF MdeModulePkg\/Universal\/BdsDxe\/BdsDxe.inf/a\  INF Platform/Xiaomi/sm8550/probe/Probe.inf' \
             edk2-msm/Platform/Qualcomm/sm8550/sm8550.fdf
-          echo "--- 确认 FDF ---"
+          echo "--- 确认 FDF(探针) ---"
           grep -n "probe/Probe.inf" edk2-msm/Platform/Qualcomm/sm8550/sm8550.fdf
+
+          # ③ 顺手补 USB 键盘驱动: 原列表里只有 UsbBus/UsbMouse/UsbMassStorage,
+          #    没有 UsbKbDxe, 所以插 OTG 键盘也没反应。加上它, 插键盘就能选菜单。
+          sed -i '/INF MdeModulePkg\/Bus\/Usb\/UsbMassStorageDxe\/UsbMassStorageDxe.inf/a\  INF MdeModulePkg/Bus/Usb/UsbKbDxe/UsbKbDxe.inf' \
+            edk2-msm/Platform/Qualcomm/sm8550/sm8550.fdf
+          echo "--- 确认 FDF(键盘) ---"
+          grep -n "UsbKbDxe" edk2-msm/Platform/Qualcomm/sm8550/sm8550.fdf
 
       - name: 编 fuxi UEFI
         run: |
