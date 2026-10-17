@@ -29,6 +29,43 @@
 #define MAX_LOAD     (64u * 1024u * 1024u)
 #define LOG_BUF      512
 
+/* GCC 开 LTO 时, 结构体拷贝/清零会被优化成 memcpy/memset 调用,
+   而 EDK2 只提供 CopyMem/SetMem, 没有 libc。这里补三个兼容实现。
+   注意: 必须用 CopyMem/SetMem 实现, 否则 -fno-builtin 下会自己调自己。 */
+#if defined(__GNUC__)
+
+VOID *
+memcpy (
+  OUT VOID        *Dest,
+  IN  CONST VOID  *Src,
+  IN  UINTN        Len
+  )
+{
+  return CopyMem (Dest, (VOID *) Src, Len);
+}
+
+VOID *
+memset (
+  OUT VOID  *Dest,
+  IN  INTN   Val,
+  IN  UINTN  Len
+  )
+{
+  return SetMem (Dest, Len, (UINT8) Val);
+}
+
+VOID *
+memmove (
+  OUT VOID        *Dest,
+  IN  CONST VOID  *Src,
+  IN  UINTN        Len
+  )
+{
+  return CopyMem (Dest, (VOID *) Src, Len);
+}
+
+#endif
+
 STATIC EFI_FILE_HANDLE gRootDir = NULL;
 
 /* 兜底: Ubuntu 的 aarch64-linux-gnu-gcc 可能默认开启栈保护,
