@@ -64,6 +64,20 @@ jobs:
           # 不要加 --skip-rootfs-gen: SimpleInitRootFS.inf 需要 build/rootfs.c
           ./build.sh -d fuxi -r RELEASE 2>&1 | tail -200
 
+      - name: 诊断：探针进没进固件卷
+        run: |
+          set -x
+          echo "=== DEVICE_DXE_FV_COMPONENTS 出现在哪 ==="
+          grep -rn "DEVICE_DXE_FV_COMPONENTS" edk2-msm/Platform edk2-msm/Silicon 2>/dev/null | head -5
+          echo "=== fuxi.fdf.inc 内容 ==="
+          cat edk2-msm/Platform/Xiaomi/sm8550/fuxi.fdf.inc
+          echo "=== sm8550.fdf 里 FV 与 INF 的结构 ==="
+          grep -n "^\[\|INF \|DEVICE_DXE" edk2-msm/Platform/Qualcomm/sm8550/sm8550.fdf 2>/dev/null | head -40
+          echo "=== 生成的 FV/FD ==="
+          find edk2-msm -maxdepth 5 \( -name "*.Fv" -o -name "*.fv" -o -name "*.fd" \) 2>/dev/null | head -20
+          echo "=== 在 boot-fuxi.img 里找探针 GUID ==="
+          python3 tools/find_probe.py edk2-msm/boot-fuxi.img
+
       - name: 检查产物（没有就报错）
         run: |
           set -euo pipefail
