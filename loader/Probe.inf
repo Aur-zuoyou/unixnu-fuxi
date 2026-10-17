@@ -24,3 +24,6 @@
   MemoryAllocationLib
   PrintLib
   DebugLib
+
+[Depex]
+  TRUE
