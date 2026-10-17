@@ -6,7 +6,7 @@
 |---|---|---|---|---|
 | **M0** | 工具链与骨架 | `appledt` 自测全过；能合成合法 DTB；loader 代码就位 | ✅ 已完成 | 无 |
 | **M0.5** | 固件解析 + 真机设备树 | 从 vendor_boot/dtbo 抽出 DT 并合并成 4852 节点、校验通过 | ✅ 已完成 | 无 |
-| **M1** | fuxi 上跑起我们的 EFI app | UEFI Shell 里执行后，屏幕打印出 `CurrentEL`、内存描述符数量、DTB 地址 | 1–3 天（**卡在 aarch64 工具链**） | 刷 Renegade UEFI + 能编译 |
+| **M1** | fuxi 上跑起我们的 EFI app | UEFI Shell 里执行后，屏幕打印出 `CurrentEL`、内存描述符数量、DTB 地址 | **已编出 .efi（2026-10-17），等 UEFI 环境** | Renegade UEFI |
 | **M2** | 装载并跳转平坦 payload | 跳转后看到 payload 打印的一行字（UART 或 ramoops） | 1–2 周 | M1 |
 | **M3** | 设备树校准 | 生成的 DT 与 iPhone X 参考 DT 的节点/属性差异清单收敛到"仅硬件相关" | 1–2 周 | 参考 DT |
 | **M4** | QEMU virt 上跑通 XNU | 虚拟机里看到 XNU 早期启动日志（不是 panic） | 1–2 月 | 无（纯开源） |
@@ -31,10 +31,23 @@ PSCI `smc`、定时器 `/soc/timer`。
 
 ## 已知阻塞
 
-本机没有 aarch64 工具链（clang/gcc/WSL 全无，网络下载被拦），所以 `.efi` 编不出来。
-两条出路：
-1. 推到 GitHub，用 `.github/workflows/build-loader.yml` 在 Actions 里编（推荐，零本地依赖）
-2. 本地装 `aarch64-linux-gnu-` + edk2 BaseTools
+~~本机没有 aarch64 工具链~~ —— **已解决**。改用 GitHub Actions 编译，
+`FuxiLoader.efi` 已在 CI 上编译成功（2026-10-17）。
+
+现在的阻塞是**没有 UEFI 运行环境**：
+
+- 手机上：要 Renegade UEFI 镜像（GitHub 官方 release 里没有 fuxi，需从 Renegade 站点/群获取）
+- 电脑上：要 QEMU + aarch64 EDK2 固件
+
+## CI 踩过的坑（留给下次）
+
+| 报错 | 原因 | 修法 |
+|---|---|---|
+| `could not read Username ... subhook` | edk2 里 `UnitTestFrameworkPkg/Library/SubhookLib/subhook` 指向已删除的仓库 | 递归拉子模块前把该子模块设为 `update none` |
+| `library class [DevicePathLib] is not found` | `UefiLib` 的传递依赖（DevicePathLib/HiiLib/RuntimeServices） | 不用 UefiLib，改 PrintLib + ConOut |
+| `MdePkg.dec(32): MipiSysTLib not found` | 跳过子模块导致 DEC 的 include 路径缺失 | 子模块必须拉全 |
+| `undefined reference to __stack_chk_fail` | Ubuntu 交叉编译器默认 `-fstack-protector-strong` | DSC 关栈保护 + 兜底实现 |
+| `undefined reference to memcpy` | GCC LTO 把结构体拷贝变成 libc 调用 | 用 CopyMem/SetMem 实现 memcpy/memset/memmove |
 
 ## M1 的具体步骤
 
