@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "appledt"))
 import bootimg as B          # noqa: E402
 import apple_dt as A         # noqa: E402
 import overlay as O          # noqa: E402
+import eficheck as E         # noqa: E402
 
 TESTS = []
 
@@ -259,6 +260,53 @@ def test_overlay_skips_unknown_target():
     assert res.fragments_applied == 0
     assert res.fragments_skipped
     assert O.check(merged) == []
+
+
+# ---------------------------------------------------------------- EFI 检查
+
+def make_efi(machine: int = 0xAA64, subsystem: int = 10, entry: int = 0x1000) -> bytes:
+    e_lfanew = 0x80
+    size_opt = 0xF0
+    blob = bytearray(0x600)
+    blob[0:2] = b"MZ"
+    struct.pack_into("<I", blob, 0x3C, e_lfanew)
+    blob[e_lfanew:e_lfanew + 4] = b"PE\0\0"
+    struct.pack_into("<HHIIIHH", blob, e_lfanew + 4,
+                     machine, 1, 0, 0, 0, size_opt, 0x22)
+    opt = e_lfanew + 24
+    struct.pack_into("<H", blob, opt, 0x20B)          # PE32+
+    struct.pack_into("<I", blob, opt + 16, entry)     # AddressOfEntryPoint
+    struct.pack_into("<H", blob, opt + 68, subsystem) # Subsystem
+    sec = opt + size_opt
+    blob[sec:sec + 8] = b".text\0\0\0"
+    struct.pack_into("<IIII", blob, sec + 8, 0x100, 0x1000, 0x200, 0x400)
+    struct.pack_into("<I", blob, sec + 36, 0x60000020)  # code | execute | read
+    return bytes(blob)
+
+
+@test
+def test_eficheck_ok():
+    info = E.parse(make_efi())
+    assert info["machine_name"] == "AArch64"
+    assert info["subsystem_name"] == "EFI Application"
+    ok, notes = E.verdict(info)
+    assert ok, notes
+
+
+@test
+def test_eficheck_rejects():
+    ok, notes = E.verdict(E.parse(make_efi(machine=0x8664)))
+    assert not ok and any("AArch64" in n for n in notes), notes
+
+    ok, notes = E.verdict(E.parse(make_efi(entry=0x9000)))
+    assert not ok, notes
+
+    try:
+        E.parse(b"not a pe file" * 10)
+    except E.PeError:
+        pass
+    else:
+        raise AssertionError("非 PE 应当抛错")
 
 
 def main() -> int:
