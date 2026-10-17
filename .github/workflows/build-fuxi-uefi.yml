@@ -52,19 +52,17 @@ jobs:
           cp loader/Probe.c loader/Probe.inf "$probe"/
 
           # ① [Components] 必须插进"已有的"段里; 新追加一个段会被静默忽略。
-          #    注意: 这个段可能在 .dsc, 也可能在被 include 的 .inc 里, 所以扫宽一点。
-          set +e
-          comp=$(grep -rl '^\[Components' edk2-msm/Platform/Qualcomm edk2-msm/Silicon/Qualcomm 2>/dev/null | head -1)
-          set -e
+          #    而且不能瞎 grep: 别的机型的 DSC 也有这个段。必须顺着 fuxi.dsc 的
+          #    !include 链找, 否则插到无关文件里, build 会报 F001 NOT found in DSC。
+          comp="$(python3 tools/find_components_file.py edk2-msm edk2-msm/Platform/Xiaomi/sm8550/fuxi.dsc || true)"
           echo "components file: [$comp]"
           if [ -z "$comp" ]; then
-            echo "!! 没找到 [Components] 段, 退回追加到 fuxi.dsc (可能仍无效, 见 diag)"
-            printf '\n[Components]\n  Platform/Xiaomi/sm8550/probe/Probe.inf\n' >> edk2-msm/Platform/Xiaomi/sm8550/fuxi.dsc
-          else
-            sed -i '0,/^\[Components/s//&\n  Platform\/Xiaomi\/sm8550\/probe\/Probe.inf/' "$comp"
-            echo "--- 确认 Components ---"
-            grep -n -A4 '^\[Components' "$comp" | head -10
+            echo "!! 沿 include 链没找到 [Components, 构建几乎肯定失败"
+            exit 1
           fi
+          sed -i '0,/^\[[Cc]omponents/s//&\n  Platform\/Xiaomi\/sm8550\/probe\/Probe.inf/' "$comp"
+          echo "--- 确认 Components ---"
+          grep -n -A5 -i '^\[components' "$comp" | head -12
 
           # ② FDF: sm8550.fdf 不使用 DEVICE_DXE_FV_COMPONENTS, 必须直接插进 [FV.FvMain]
           sed -i '/INF MdeModulePkg\/Universal\/BdsDxe\/BdsDxe.inf/a\  INF Platform/Xiaomi/sm8550/probe/Probe.inf' \
