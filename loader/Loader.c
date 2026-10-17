@@ -266,33 +266,33 @@ UefiMain (
 
   (VOID) SystemTable;
 
-  Log (L"[fuxi-loader] 启动, CurrentEL = EL%Lu\n", CurrentEl ());
+  Log (L"[fuxi-loader] boot, CurrentEL = EL%Lu\n", CurrentEl ());
 
   Status = OpenRoot (ImageHandle);
   if (EFI_ERROR (Status)) {
-    Log (L"[fuxi-loader] 打不开 ESP 根目录: %r\n", Status);
+    Log (L"[fuxi-loader] cannot open ESP root: %r\n", Status);
     return Status;
   }
 
   Status = ReadWholeFile (DT_NAME, &Dt, &DtSize);
   if (EFI_ERROR (Status)) {
-    Log (L"[fuxi-loader] 读取 %s 失败: %r\n", DT_NAME, Status);
+    Log (L"[fuxi-loader] read %s failed: %r\n", DT_NAME, Status);
     return Status;
   }
-  Log (L"[fuxi-loader] 设备树 @ 0x%Lx (%Lu 字节)\n", (UINT64) (UINTN) Dt, (UINT64) DtSize);
+  Log (L"[fuxi-loader] DTB @ 0x%Lx (%Lu bytes)\n", (UINT64) (UINTN) Dt, (UINT64) DtSize);
 
   Status = ReadWholeFile (PAYLOAD_NAME, &Payload, &PayloadSize);
   if (EFI_ERROR (Status)) {
-    Log (L"[fuxi-loader] 没有 %s, 只做自检后退出: %r\n", PAYLOAD_NAME, Status);
+    Log (L"[fuxi-loader] no %s, self-check only: %r\n", PAYLOAD_NAME, Status);
     return EFI_SUCCESS;
   }
-  Log (L"[fuxi-loader] 载荷   @ 0x%Lx (%Lu 字节)\n",
+  Log (L"[fuxi-loader] payload @ 0x%Lx (%Lu bytes)\n",
        (UINT64) (UINTN) Payload, (UINT64) PayloadSize);
 
   Log (L"[fuxi-loader] ExitBootServices ...\n");
   Status = LeaveBootServices (ImageHandle);
   if (EFI_ERROR (Status)) {
-    Log (L"[fuxi-loader] ExitBootServices 失败: %r\n", Status);
+    Log (L"[fuxi-loader] ExitBootServices failed: %r\n", Status);
     return Status;
   }
 
