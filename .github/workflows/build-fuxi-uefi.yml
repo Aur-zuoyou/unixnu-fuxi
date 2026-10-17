@@ -41,6 +41,24 @@ jobs:
           git log --oneline -1
           ls
 
+      - name: 注入探针驱动
+        run: |
+          set -euo pipefail
+          set -x
+          # fuxi 这版固件没有输入驱动, 菜单/Shell 都操作不了。
+          # 所以把探针编进固件, 由 BDS 自动加载, 不需要任何按键。
+          probe=edk2-msm/Platform/Xiaomi/sm8550/probe
+          mkdir -p "$probe"
+          cp loader/Probe.c loader/Probe.inf "$probe"/
+          cat >> edk2-msm/Platform/Xiaomi/sm8550/fuxi.dsc <<'EOF'
+
+[Components]
+  Platform/Xiaomi/sm8550/probe/Probe.inf
+EOF
+          echo "INF Platform/Xiaomi/sm8550/probe/Probe.inf" >> edk2-msm/Platform/Xiaomi/sm8550/fuxi.fdf.inc
+          echo "--- fuxi.fdf.inc ---"; cat edk2-msm/Platform/Xiaomi/sm8550/fuxi.fdf.inc || true
+          echo "--- fuxi.dsc 尾部 ---"; tail -8 edk2-msm/Platform/Xiaomi/sm8550/fuxi.dsc
+
       - name: 编 fuxi UEFI
         run: |
           set -euo pipefail        # 关键: 管道不能吞掉 build.sh 的退出码
