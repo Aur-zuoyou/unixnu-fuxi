@@ -50,22 +50,33 @@ jobs:
           probe=edk2-msm/Platform/Xiaomi/sm8550/probe
           mkdir -p "$probe"
           cp loader/Probe.c loader/Probe.inf "$probe"/
-          printf '\n[Components]\n  Platform/Xiaomi/sm8550/probe/Probe.inf\n' >> edk2-msm/Platform/Xiaomi/sm8550/fuxi.dsc
-          # 关键: sm8550.fdf 并不使用 DEVICE_DXE_FV_COMPONENTS, 所以写 fuxi.fdf.inc 没用。
-          # 必须直接插进 sm8550.fdf 的 [FV.FvMain] 里(借 BdsDxe 那行当锚点)。
+
+          # ① [Components] 必须插进"已有的"段里。
+          #    新追加一个 [Components] 段会被静默忽略(DSC 不允许重复段)。
+          comp=$(grep -rl "^\[Components\]" edk2-msm/Platform/Qualcomm/sm8550/ edk2-msm/Silicon/Qualcomm/ 2>/dev/null | head -1)
+          [ -n "$comp" ] || comp=edk2-msm/Platform/Qualcomm/sm8550/sm8550.dsc
+          echo "components file: $comp"
+          sed -i '0,/^\[Components\]/s//[Components]\n  Platform\/Xiaomi\/sm8550\/probe\/Probe.inf/' "$comp"
+          echo "--- 确认 Components ---"
+          grep -n -A3 "^\[Components\]" "$comp" | head -8
+
+          # ② FDF: sm8550.fdf 不使用 DEVICE_DXE_FV_COMPONENTS, 必须直接插进 [FV.FvMain]
           sed -i '/INF MdeModulePkg\/Universal\/BdsDxe\/BdsDxe.inf/a\  INF Platform/Xiaomi/sm8550/probe/Probe.inf' \
             edk2-msm/Platform/Qualcomm/sm8550/sm8550.fdf
-          echo "--- 确认插进去了 ---"
+          echo "--- 确认 FDF ---"
           grep -n "probe/Probe.inf" edk2-msm/Platform/Qualcomm/sm8550/sm8550.fdf
 
       - name: 编 fuxi UEFI
         run: |
-          set -euo pipefail        # 关键: 管道不能吞掉 build.sh 的退出码
-          set -x
+          set -o pipefail
           cd edk2-msm
           export CROSS_COMPILE=aarch64-linux-gnu-
           # 不要加 --skip-rootfs-gen: SimpleInitRootFS.inf 需要 build/rootfs.c
-          ./build.sh -d fuxi -r RELEASE 2>&1 | tail -200
+          ./build.sh -d fuxi -r RELEASE > build.log 2>&1
+          rc=$?
+          tail -120 build.log
+          cp build.log ../build.log
+          exit $rc
 
       - name: 诊断（结果写进 diag.txt, 随 artifact 下载）
         run: |
@@ -85,6 +96,15 @@ jobs:
           echo
           echo "### fuxi.dsc 尾部（我们追加的 [Components]）"
           tail -12 edk2-msm/Platform/Xiaomi/sm8550/fuxi.dsc || true
+          echo
+          echo "### 所有引用了 probe/Probe.inf 的位置"
+          grep -rn "probe/Probe.inf" edk2-msm/Platform edk2-msm/Silicon 2>/dev/null | head -10 || true
+          echo
+          echo "### build.log 里与 probe 相关的行"
+          grep -in "probe" build.log 2>/dev/null | head -25 || true
+          echo
+          echo "### build.log 里与 Components 相关的行"
+          grep -in "Component" build.log 2>/dev/null | head -15 || true
           echo
           echo "### 生成产物列表"
           find edk2-msm -maxdepth 5 \( -name "*.Fv" -o -name "*.fv" -o -name "*.fd" -o -name "*.img" \) 2>/dev/null | head -30 || true
@@ -112,4 +132,5 @@ jobs:
             edk2-msm/boot-fuxi.img
             edk2-msm/uefi-fuxi*.img
             edk2-msm/diag.txt
+            build.log
           if-no-files-found: error
