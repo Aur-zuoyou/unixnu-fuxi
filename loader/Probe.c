@@ -1,49 +1,35 @@
 /** @file  Probe.c
 
-  fuxi 探针 v6 —— 只分辨"能不能拿到 GOP"。
+  fuxi 探针 v7 —— 结论已明确:
+    v4 证明驱动会被执行;
+    v6 证明 LocateProtocol(GOP) 拿不到帧缓冲(屏幕不变绿), 这版固件的显示
+       不走标准 GOP, 而屏幕上那行 "Image at ... start failed" 说明
+       ConOut(文字输出) 是通的。
 
-  已知事实:
-    v4: 入口 wfi -> 手机卡住, 证明驱动会被 DXE 调度执行。
-    v5: 定时器 + 拿到就刷绿 + halt -> 屏幕最后停在菜单不动(原因不明:
-        可能 GOP 没拿到直接 halt, 也可能刷了绿又被别的绘制盖掉)。
-
-  v6: 每 100ms 重刷一次绿, 而且永不 halt。
-    屏幕持续绿 -> GOP 能拿到(反复覆盖, 画什么都盖不住)
-    菜单照旧   -> GOP 拿不到, 计时器在空转
-    两种情况都不会把手机卡死, 便于反复观察。
+  v7 策略: 完全放弃 GOP, 用 ConOut。
+    每 500ms 打一行, 反复打, 保证 BDS 画完菜单之后依然能看到。
+    同时打印次数上限, 避免刷屏到无法使用。
 **/
 
 #include <Uefi.h>
 #include <Library/UefiDriverEntryPoint.h>
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/BaseLib.h>
-#include <Protocol/GraphicsOutput.h>
+#include <Library/PrintLib.h>
 
 STATIC EFI_EVENT  mTimer;
 STATIC UINT32     mTries;
-STATIC BOOLEAN    mPainted;
+STATIC UINT32     mPrinted;
 
 STATIC
-VOID
-Paint (
-  IN EFI_GRAPHICS_OUTPUT_PROTOCOL  *Gop
+UINT64
+CurrentEl (
+  VOID
   )
 {
-  UINT32  *Pix;
-  UINTN    Count;
-  UINTN    i;
-
-  if (Gop->Mode == NULL) {
-    return;
-  }
-  Pix   = (UINT32 *) (UINTN) Gop->Mode->FrameBufferBase;
-  Count = (UINTN) Gop->Mode->FrameBufferSize / 4;
-  if (Pix == NULL) {
-    return;
-  }
-  for (i = 0; i < Count; i++) {
-    Pix[i] = 0xFF00FF00;     /* 纯绿 */
-  }
+  UINT64  Val;
+  __asm__ __volatile__ ("mrs %0, CurrentEL" : "=r" (Val));
+  return (Val >> 2) & 0x3;
 }
 
 STATIC
@@ -54,18 +40,26 @@ OnTimer (
   IN VOID      *Context
   )
 {
-  EFI_STATUS                     Status;
-  EFI_GRAPHICS_OUTPUT_PROTOCOL  *Gop = NULL;
+  CHAR16  Buf[160];
 
   (VOID) Event;
   (VOID) Context;
   mTries++;
 
-  Status = gBS->LocateProtocol (&gEfiGraphicsOutputProtocolGuid, NULL, (VOID **) &Gop);
-  if (!EFI_ERROR (Status) && Gop != NULL && Gop->Mode != NULL) {
-    Paint (Gop);
-    mPainted = TRUE;
+  if (gST == NULL || gST->ConOut == NULL) {
+    return;                     /* 控制台还没好, 下次再试 */
   }
+  if (mPrinted >= 40) {
+    return;                     /* 打够 40 行(约 20 秒)就安静 */
+  }
+
+  UnicodeSPrint (
+    Buf, sizeof (Buf),
+    L"[fuxi-probe v7] EL%Lu  ConOut OK  tries=%Lu\r\n",
+    CurrentEl (), (UINT64) mTries
+    );
+  gST->ConOut->OutputString (gST->ConOut, Buf);
+  mPrinted++;
 }
 
 EFI_STATUS
@@ -84,5 +78,5 @@ ProbeEntry (
   if (EFI_ERROR (Status)) {
     return Status;
   }
-  return gBS->SetTimer (mTimer, TimerPeriodic, 100000);   /* 10ms: 抢在重绘之前覆盖 */
+  return gBS->SetTimer (mTimer, TimerPeriodic, 5000000);   /* 500ms */
 }

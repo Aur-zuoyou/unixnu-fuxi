@@ -1,5 +1,5 @@
 ## @file
-#  fuxi 鎺㈤拡 v5 (DXE 椹卞姩, 瀹氭椂鍣ㄨ疆璇?GOP)
+#  fuxi 探针 v7 (DXE 驱动, 用 ConOut 反复打印)
 ##
 
 [Defines]
@@ -7,7 +7,7 @@
   BASE_NAME                      = FuxiProbe
   FILE_GUID                      = 9c4e2a71-3d85-4f0b-8a6e-1b7d5c2e9f34
   MODULE_TYPE                    = DXE_DRIVER
-  VERSION_STRING                 = 0.6
+  VERSION_STRING                 = 0.7
   ENTRY_POINT                    = ProbeEntry
 
 [Sources]
@@ -16,15 +16,10 @@
 [Packages]
   MdePkg/MdePkg.dec
 
-[Protocols]
-  gEfiGraphicsOutputProtocolGuid
-
 [LibraryClasses]
   UefiDriverEntryPoint
   UefiBootServicesTableLib
-  UefiRuntimeServicesTableLib
   BaseLib
-  BaseMemoryLib
   PrintLib
   DebugLib
 
