@@ -22,6 +22,7 @@ MARKERS = {
     "v2 (EndOfDxe 打印)": "staying here on purpose",
     "v3 (刷 GOP 绿屏)": "memmap-ok",
     "v4 (入口直接 halt)": "fuxi-probe-v4-halt",
+    "v5 (定时器轮询 GOP)": "fuxi-probe-v5-timer",
 }
 
 
