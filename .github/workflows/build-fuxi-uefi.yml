@@ -51,9 +51,12 @@ jobs:
           mkdir -p "$probe"
           cp loader/Probe.c loader/Probe.inf "$probe"/
           printf '\n[Components]\n  Platform/Xiaomi/sm8550/probe/Probe.inf\n' >> edk2-msm/Platform/Xiaomi/sm8550/fuxi.dsc
-          echo "INF Platform/Xiaomi/sm8550/probe/Probe.inf" >> edk2-msm/Platform/Xiaomi/sm8550/fuxi.fdf.inc
-          echo "--- fuxi.fdf.inc ---"; cat edk2-msm/Platform/Xiaomi/sm8550/fuxi.fdf.inc || true
-          echo "--- fuxi.dsc tail ---"; tail -8 edk2-msm/Platform/Xiaomi/sm8550/fuxi.dsc
+          # 关键: sm8550.fdf 并不使用 DEVICE_DXE_FV_COMPONENTS, 所以写 fuxi.fdf.inc 没用。
+          # 必须直接插进 sm8550.fdf 的 [FV.FvMain] 里(借 BdsDxe 那行当锚点)。
+          sed -i '/INF MdeModulePkg\/Universal\/BdsDxe\/BdsDxe.inf/a\  INF Platform/Xiaomi/sm8550/probe/Probe.inf' \
+            edk2-msm/Platform/Qualcomm/sm8550/sm8550.fdf
+          echo "--- 确认插进去了 ---"
+          grep -n "probe/Probe.inf" edk2-msm/Platform/Qualcomm/sm8550/sm8550.fdf
 
       - name: 编 fuxi UEFI
         run: |
