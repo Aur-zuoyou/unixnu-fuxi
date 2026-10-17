@@ -16,6 +16,12 @@
 [Packages]
   MdePkg/MdePkg.dec
 
+[Protocols]
+  gEfiGraphicsOutputProtocolGuid
+
+[Guids]
+  gEfiGraphicsOutputProtocolGuid
+
 [LibraryClasses]
   UefiDriverEntryPoint
   UefiBootServicesTableLib
