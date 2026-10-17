@@ -81,17 +81,20 @@ jobs:
 
       - name: 编 fuxi UEFI
         run: |
-          set -o pipefail
+          set +e                    # 关键: GitHub 用 bash -e, 否则 build.sh 一失败就吞掉日志
           cd edk2-msm
           export CROSS_COMPILE=aarch64-linux-gnu-
           # 不要加 --skip-rootfs-gen: SimpleInitRootFS.inf 需要 build/rootfs.c
           ./build.sh -d fuxi -r RELEASE > build.log 2>&1
           rc=$?
-          tail -120 build.log
+          set -e
+          echo "=== build.sh 退出码: $rc ==="
+          tail -150 build.log
           cp build.log ../build.log
           exit $rc
 
       - name: 诊断（结果写进 diag.txt, 随 artifact 下载）
+        if: always()
         run: |
           exec > >(tee edk2-msm/diag.txt) 2>&1
           echo "### date: $(date -u)"
@@ -141,6 +144,7 @@ jobs:
           ls -l edk2-msm/boot-fuxi.img edk2-msm/diag.txt
 
       - name: 上传
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: fuxi-uefi
