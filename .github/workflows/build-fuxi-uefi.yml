@@ -29,7 +29,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential git python3 uuid-dev nasm acpica-tools \
             clang lld llvm gcc-aarch64-linux-gnu \
-            device-tree-compiler libfdt-dev zlib1g-dev
+            device-tree-compiler libfdt-dev zlib1g-dev \
+            gettext gperf pkg-config libssl-dev
 
       - name: 取 edk2-msm
         run: |
