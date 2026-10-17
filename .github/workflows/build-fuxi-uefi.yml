@@ -33,6 +33,7 @@ jobs:
 
       - name: 取 edk2-msm
         run: |
+          set -euo pipefail
           set -x
           git clone --depth 1 https://github.com/edk2-porting/edk2-msm.git
           cd edk2-msm
@@ -41,17 +42,19 @@ jobs:
 
       - name: 编 fuxi UEFI
         run: |
+          set -euo pipefail        # 关键: 管道不能吞掉 build.sh 的退出码
           set -x
           cd edk2-msm
           export CROSS_COMPILE=aarch64-linux-gnu-
-          # --skip-rootfs-gen: 跳过 SimpleInit 的 rootfs 生成(那部分要联网拉包, 我们暂时用不上)
-          ./build.sh -d fuxi --skip-rootfs-gen -r RELEASE 2>&1 | tail -120
+          ./build.sh -d fuxi --skip-rootfs-gen -r RELEASE 2>&1 | tail -200
 
-      - name: 检查产物
+      - name: 检查产物（没有就报错）
         run: |
+          set -euo pipefail
           set -x
-          ls -lh edk2-msm/*.img 2>/dev/null || true
-          find edk2-msm -maxdepth 3 -name "boot-fuxi*.img" -o -maxdepth 3 -name "uefi-fuxi*" | head
+          ls -lh edk2-msm/*.img || true
+          test -f edk2-msm/boot-fuxi.img
+          ls -l edk2-msm/boot-fuxi.img
 
       - name: 上传
         uses: actions/upload-artifact@v4
@@ -60,4 +63,4 @@ jobs:
           path: |
             edk2-msm/boot-fuxi.img
             edk2-msm/uefi-fuxi*.img
-          if-no-files-found: warn
+          if-no-files-found: error
