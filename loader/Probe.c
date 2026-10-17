@@ -1,65 +1,48 @@
 /** @file  Probe.c
 
-  fuxi 探针 v5 —— 终于确认的事实(来自 v4 实测):
-    驱动"会被 DXE 调度并执行"。v4 在入口 wfi 死循环, 手机卡住、不出菜单。
-    但 v2/v3 挂 EndOfDxe 事件都没反应 —— 那个事件在这个平台上靠不住。
+  fuxi 探针 v6 —— 只分辨"能不能拿到 GOP"。
 
-  v5 的策略: 入口只注册一个 100ms 周期定时器, 然后返回。
-    每次定时器回调里尝试拿 GOP(帧缓冲);
-      拿到 -> 整屏刷绿 + 控制台打印 EL/FDT -> 死循环停住
-      没拿到 -> 下次再试(最多 30 秒)
-    这样既不依赖 EndOfDxe, 也不要求"入口时"控制台/显卡已就绪。
+  已知事实:
+    v4: 入口 wfi -> 手机卡住, 证明驱动会被 DXE 调度执行。
+    v5: 定时器 + 拿到就刷绿 + halt -> 屏幕最后停在菜单不动(原因不明:
+        可能 GOP 没拿到直接 halt, 也可能刷了绿又被别的绘制盖掉)。
+
+  v6: 每 100ms 重刷一次绿, 而且永不 halt。
+    屏幕持续绿 -> GOP 能拿到(反复覆盖, 画什么都盖不住)
+    菜单照旧   -> GOP 拿不到, 计时器在空转
+    两种情况都不会把手机卡死, 便于反复观察。
 **/
 
 #include <Uefi.h>
 #include <Library/UefiDriverEntryPoint.h>
 #include <Library/UefiBootServicesTableLib.h>
-#include <Library/UefiRuntimeServicesTableLib.h>
 #include <Library/BaseLib.h>
-#include <Library/BaseMemoryLib.h>
-#include <Library/PrintLib.h>
 #include <Protocol/GraphicsOutput.h>
-
-/* used: 防止被优化掉, 便于事后在固件里确认版本 */
-STATIC CONST CHAR16  mMark[] __attribute__((used)) = L"fuxi-probe-v5-timer";
 
 STATIC EFI_EVENT  mTimer;
 STATIC UINT32     mTries;
-
-STATIC EFI_GUID  mFdtTableGuid = {
-  0xb1b621d5, 0xf19c, 0x41a5, { 0x83, 0x0b, 0xd9, 0x15, 0x2c, 0x69, 0xaa, 0xe0 }
-};
-
-STATIC
-UINT64
-CurrentEl (
-  VOID
-  )
-{
-  UINT64  Val;
-  __asm__ __volatile__ ("mrs %0, CurrentEL" : "=r" (Val));
-  return (Val >> 2) & 0x3;
-}
+STATIC BOOLEAN    mPainted;
 
 STATIC
 VOID
-Halt (
-  VOID
+Paint (
+  IN EFI_GRAPHICS_OUTPUT_PROTOCOL  *Gop
   )
 {
-  for ( ; ; ) {
-    __asm__ __volatile__ ("wfi");
+  UINT32  *Pix;
+  UINTN    Count;
+  UINTN    i;
+
+  if (Gop->Mode == NULL) {
+    return;
   }
-}
-
-STATIC
-VOID
-Say (
-  IN CONST CHAR16  *Text
-  )
-{
-  if (gST != NULL && gST->ConOut != NULL) {
-    gST->ConOut->OutputString (gST->ConOut, (CHAR16 *) Text);
+  Pix   = (UINT32 *) (UINTN) Gop->Mode->FrameBufferBase;
+  Count = (UINTN) Gop->Mode->FrameBufferSize / 4;
+  if (Pix == NULL) {
+    return;
+  }
+  for (i = 0; i < Count; i++) {
+    Pix[i] = 0xFF00FF00;     /* 纯绿 */
   }
 }
 
@@ -73,59 +56,16 @@ OnTimer (
 {
   EFI_STATUS                     Status;
   EFI_GRAPHICS_OUTPUT_PROTOCOL  *Gop = NULL;
-  UINT8                         *Base;
-  UINTN                          Size;
-  UINT32                        *Pix;
-  UINTN                          i;
-  UINTN                          FdtAddr = 0;
-  UINT32                         FdtSize = 0;
-  CHAR16                         Buf[128];
 
   (VOID) Event;
   (VOID) Context;
   mTries++;
 
   Status = gBS->LocateProtocol (&gEfiGraphicsOutputProtocolGuid, NULL, (VOID **) &Gop);
-  if (EFI_ERROR (Status) || Gop == NULL || Gop->Mode == NULL) {
-    /* 30 秒还拿不到 GOP: 停住(至少证明进过定时器) */
-    if (mTries > 300) {
-      Halt ();
-    }
-    return;
+  if (!EFI_ERROR (Status) && Gop != NULL && Gop->Mode != NULL) {
+    Paint (Gop);
+    mPainted = TRUE;
   }
-
-  /* --- 拿到帧缓冲了 --- */
-  Base = (UINT8 *) (UINTN) Gop->Mode->FrameBufferBase;
-  Size = (UINTN) Gop->Mode->FrameBufferSize;
-  if (Base != NULL && Size >= 4) {
-    Pix = (UINT32 *) Base;
-    for (i = 0; i < Size / 4; i++) {
-      Pix[i] = 0xFF00FF00;          /* 纯绿 */
-    }
-  }
-
-  for (i = 0; i < gST->NumberOfTableEntries; i++) {
-    if (CompareGuid (&gST->ConfigurationTable[i].VendorGuid, &mFdtTableGuid)) {
-      UINT8  *F = (UINT8 *) gST->ConfigurationTable[i].VendorTable;
-      FdtAddr = (UINTN) F;
-      if (F != NULL) {
-        FdtSize = ((UINT32) F[4] << 24) | ((UINT32) F[5] << 16) |
-                  ((UINT32) F[6] << 8) | (UINT32) F[7];
-      }
-      break;
-    }
-  }
-
-  UnicodeSPrint (
-    Buf, sizeof (Buf),
-    L" fuxi-probe v5  EL%Lu  FDT=0x%Lx(%Lu)  GOP=%ux%u\r\n",
-    CurrentEl (), (UINT64) FdtAddr, (UINT64) FdtSize,
-    (UINT32) Gop->Mode->Info->HorizontalResolution,
-    (UINT32) Gop->Mode->Info->VerticalResolution
-    );
-  Say (Buf);
-
-  Halt ();
 }
 
 EFI_STATUS
@@ -142,7 +82,7 @@ ProbeEntry (
 
   Status = gBS->CreateEvent (EVT_TIMER, TPL_CALLBACK, OnTimer, NULL, &mTimer);
   if (EFI_ERROR (Status)) {
-    Halt ();
+    return Status;
   }
-  return gBS->SetTimer (mTimer, TimerPeriodic, 1000000);  /* 100ms */
+  return gBS->SetTimer (mTimer, TimerPeriodic, 100000);   /* 10ms: 抢在重绘之前覆盖 */
 }

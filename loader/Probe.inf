@@ -1,5 +1,5 @@
 ## @file
-#  fuxi 探针 v5 (DXE 驱动, 定时器轮询 GOP)
+#  fuxi 鎺㈤拡 v5 (DXE 椹卞姩, 瀹氭椂鍣ㄨ疆璇?GOP)
 ##
 
 [Defines]
@@ -7,7 +7,7 @@
   BASE_NAME                      = FuxiProbe
   FILE_GUID                      = 9c4e2a71-3d85-4f0b-8a6e-1b7d5c2e9f34
   MODULE_TYPE                    = DXE_DRIVER
-  VERSION_STRING                 = 0.5
+  VERSION_STRING                 = 0.6
   ENTRY_POINT                    = ProbeEntry
 
 [Sources]
