@@ -55,10 +55,35 @@ ld: entry point (__start) undefined. for architecture arm64e
 - `nos_arm_asm` 是"不要 ARM 汇编"标记，当前构建（VMAPPLE）下打开 → `start.s` 不参与汇编
 - 已尝试：把 `nos_arm_asm` 换成 `arm64`（只对树里真实存在的文件改），config 不再报错，但 `start.o` 仍未生成
 
-待确认（两条分支）：
+### 已确认与已尝试（2026-10-18 夜）
 
-1. `arm64` 这个 tag 在该构建系统里是否有效 —— 看 config 生成的 Makefile 里有没有 start 规则
-2. 若已选中，则检查 `start.s` 内部是否有 `#if defined(VMAPPLE)` 把 `__start` 包住
+| 步骤 | 结果 |
+|---|---|
+| `optional nos_arm_asm` → `standard` | ✅ config 选中了，出现 `AS start.o` |
+| 汇编时报缺 `<arm64/tunables/tunables.s>` | ❌ 汇编器的 `-I` 里没有 `osfmk` |
+| 往 `makedefs/MakeInc.def|.cmd` 追加 `ASFLAGS +=` | ❌ 被生成 Makefile 里的 `ASFLAGS =` 覆盖 |
+| 两段式：第一遍编完后，把 `ASFLAGS +=` 追加到**生成的 Makefile** 末尾再增量重编 | ❌ 仍然缺头文件 |
+
+说明：`osfmk/RELEASE/Makefile` 里 `start.o` 的编译规则**不使用 `ASFLAGS`** 这个变量
+（或用了别的变量/内联参数），所以追加 `ASFLAGS` 无效。
+
+### 明天的三条备选（按可靠性排序）
+
+**A. 手动汇编 start.o，再骗过链接**
+```bash
+# 用和 bcopy.o 完全相同的命令汇编 start.s（从 Makefile 里抄）
+as -I<osfmk> -I<...> -o start.o osfmk/arm64/start.s
+# 然后让链接器用到它（改 LDFILELIST 或直接塞进链接参数）
+```
+最可靠：绕开 config 与 Makefile 的所有规则。
+
+**B. 把缺的头文件放到汇编器能找到的地方**
+把 `osfmk/arm64/tunables/tunables.s`、`assym.s` 复制/软链到构建目录，
+让相对路径能被找到（需先确认 as 的搜索规则）。
+
+**C. 打印 start.o 的真实编译规则**
+`grep -A5 "^start.o:" BUILD/obj/*/osfmk/RELEASE/Makefile`
+看清它到底用哪个变量传 `-I`，再精确注入。
 
 ### 后续（M7/M8）已知难点
 
