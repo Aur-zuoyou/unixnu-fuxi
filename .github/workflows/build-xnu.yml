@@ -165,32 +165,25 @@ jobs:
           grep -rn "kernelsupport" makedefs 2>/dev/null | head -5 || true
           cd ..
 
-      - name: 构建 XNU（两段式：先编一遍，给生成的 Makefile 补 include 后再编）
+      - name: 构建 XNU（两段式）
         run: |
           exec > >(tee -a build.log) 2>&1
           set -x
           cd xnu
           NCPU=$(sysctl -n hw.ncpu)
-
-          echo "########## 第一遍（预期在 start.o 处失败）##########
+          echo "=== pass 1 ==="
           make -j"$NCPU" ARCH_CONFIGS=ARM64 KERNEL_CONFIGS=RELEASE || true
-
-          echo "########## 给生成的 Makefile 追加 include 路径 ##########
-          grep -rn "^ASFLAGS" BUILD/obj/*/osfmk/RELEASE/Makefile 2>/dev/null | head -5 || true
+          echo "=== patch generated makefiles ==="
+          EXPORT="$PWD/BUILD/obj/RELEASE_ARM64_VMAPPLE/EXPORT_HDRS"
           for mk in $(find BUILD -path "*osfmk*/RELEASE/Makefile" 2>/dev/null); do
-            printf "\n# fuxi: start.s needs these includes\nASFLAGS += -I%s/osfmk -I%s -I%s -I%s\n" \
-              "$PWD" "$PWD" "$PWD/EXTERNAL_HEADERS" "$PWD/BUILD/obj/RELEASE_ARM64_VMAPPLE/EXPORT_HDRS" \
-              >> "$mk"
-            echo "已追加到 $mk"
-            tail -3 "$mk"
+            printf "\nASFLAGS += -I%s/osfmk -I%s -I%s -I%s\n" "$PWD" "$PWD" "$PWD/EXTERNAL_HEADERS" "$EXPORT" >> "$mk"
+            echo "patched $mk"
           done
-
-          echo "########## 第二遍（增量）##########
+          echo "=== pass 2 ==="
           make -j"$NCPU" ARCH_CONFIGS=ARM64 KERNEL_CONFIGS=RELEASE || true
-
-          echo "=== 产出物 ==="
-          find BUILD -maxdepth 4 -type f \( -name "kernel*" -o -name "*.t?" \) 2>/dev/null | head -20
+          echo "=== output ==="
           find BUILD -name "start.o" | head -3
+          find BUILD -maxdepth 4 -type f \( -name "kernel*" -o -name "*.t?" \) | head -20
 
       - name: 诊断 config 的 tag 与 arm64 汇编的归属
         if: always()
