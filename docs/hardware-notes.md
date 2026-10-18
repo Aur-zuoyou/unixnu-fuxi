@@ -138,3 +138,23 @@ overlay 合并的实现是对的。
 - `init_boot.img`：PixelOS 的 ramdisk 在这个分区里（`boot.img` 的 ramdisk 长度为 0）
 - 面板的具体节点：DT 里只有 `display_panel_*` 供电 regulator，面板本体由内核模块/固件加载
 - `uefi_a` 到底是什么：头部是 ELF，需要进一步解析才知道是不是 Qualcomm 的 UEFI 环境
+
+## 真机实测：我们的代码在 fuxi 上运行（2026-10-18）
+
+用自己的 DXE 探针（`loader/Probe.c`，编进固件、无需任何输入）在真机上取得的实测结果：
+
+| 项 | 值 | 意义 |
+|---|---|---|
+| **CurrentEL** | **EL1** | 跳内核**不需要** EL2→EL1 降级，省掉 HCR_EL2/eret 那段 |
+| GOP | 可用 | 能直接写帧缓冲，不需要依赖文字输出 |
+| 显示 | 1080x2400 | 与 fuxi.dsc 里 PcdMipiFrameBuffer 一致 |
+
+过程记录（每一步都是实测确认，不是推断）：
+
+1. 自编 UEFI 能启动、点亮屏幕、进菜单、进 Shell
+2. `[Depex] TRUE` 的驱动会被 DXE 调度执行（入口 `wfi` 使手机卡住）
+3. 早期 `SetTimer` 必然失败 → 定时器方案全部无效
+4. Depex 改成 `gEfiGraphicsOutputProtocolGuid` 后: GOP 可用、帧缓冲可写（整屏变色成功）
+5. 刷屏时刻 `GraphicsConsoleDxe` 尚未接管 → 无文字；注册 `gEfiSimpleTextOutProtocolGuid` 通知后才打印成功
+
+**结论：在 fuxi 上，"加载我们的代码 → 拿到帧缓冲 → 输出信息"这条链已经完全打通。**
