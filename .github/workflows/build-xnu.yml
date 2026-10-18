@@ -1,5 +1,19 @@
 name: build-xnu
 
+          fi
+      - name: 补上缺失的 os/firehose_buffer_private.h
+        run: |
+          exec > >(tee -a shimcopy.log) 2>&1
+          set -x
+          SRC="$GITHUB_WORKSPACE/xnu-stubs/os/firehose_buffer_private.h"
+          ls -l "$SRC"
+          cp "$SRC" xnu/libkern/os/firehose_buffer_private.h
+          ls -l xnu/libkern/os/firehose_buffer_private.h
+          grep -n "firehose_buffer_t" xnu/libkern/os/firehose_buffer_private.h | head -5
+
+
+name: build-xnu
+
 # 在 macOS runner 上原生构建开源 XNU（arm64）。
 #
 # 已知问题与对策:
