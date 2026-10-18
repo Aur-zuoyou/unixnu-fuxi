@@ -38,28 +38,18 @@ jobs:
         run: |
           exec > >(tee -a fixup.log) 2>&1
           set -x
-          SDK=$(xcrun --sdk macosx --show-sdk-path)
+          SDK=$(xcrun --sdk macosx --show-sdk-path || true)
           echo "SDK=$SDK"
-          TARGET="$SDK/usr/local/libexec"
-          if [ ! -x "$TARGET/availability.pl" ]; then
-            echo "缺少 availability.pl，造一个最小替身"
-            sudo mkdir -p "$TARGET"
-            sudo tee "$TARGET/availability.pl" >/dev/null <<'EOF'
-          #!/usr/bin/env perl
-          # 最小替身：xnu 用它生成 availability 宏，这里输出空表即可
-          use strict;
-          use warnings;
-          my $mode = shift @ARGV // '';
-          if ($mode eq '-a') {
-              print "";
-          } else {
-              print "";
-          }
-          exit 0;
-          EOF
-            sudo chmod +x "$TARGET/availability.pl"
+          if [ -n "$SDK" ]; then
+            TARGET="$SDK/usr/local/libexec"
+            if [ ! -x "$TARGET/availability.pl" ]; then
+              echo "缺少 availability.pl，造一个最小替身"
+              sudo mkdir -p "$TARGET"
+              printf '#!/usr/bin/env perl\nexit 0;\n' | sudo tee "$TARGET/availability.pl" >/dev/null
+              sudo chmod +x "$TARGET/availability.pl"
+            fi
+            ls -l "$TARGET/availability.pl" || true
           fi
-          ls -l "$TARGET/availability.pl" || true
       - name: 取 XNU 源码
         run: |
           exec > >(tee -a fetch.log) 2>&1
