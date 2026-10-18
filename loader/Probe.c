@@ -335,7 +335,7 @@ OnTextOut (
   /* 只打印内部变量, 不画任何东西 —— 控制台文字是能看到的那条通道 */
   UnicodeSPrint (
     Buf, sizeof (Buf),
-    L"v21 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
+    L"v22 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
     mLocateStatus, (UINT64) mFb, (UINT64) mFbSize,
     mFbW, mFbH, mFbPitch, mGopFmt
     );
@@ -350,6 +350,36 @@ OnTextOut (
   }
 
   LeaveBootServices (mImageHandle);
+
+  /* 只有拿到帧缓冲才画; 画之前不刷屏, 每一步都留在屏幕上 */
+  if (mFb != NULL) {
+    CHAR8   Num[20];
+    CHAR8   ElBuf[4];
+    UINT32  yy;
+
+    DrawRect (700, 60, 300, 200, 0xFFFF0000);      /* 探针块 */
+
+    yy = 120;
+    DrawString (40, yy, "M3", 0xFFFFFFFF);
+    yy += LINE_H;
+
+    ElBuf[0] = 'E';
+    ElBuf[1] = 'L';
+    ElBuf[2] = (CHAR8) ('0' + (char) CurrentEl ());
+    ElBuf[3] = 0;
+    DrawString (40, yy, ElBuf, 0xFFFFFFFF);
+    yy += LINE_H;
+
+    DrawString (40, yy, "PITCH", 0xFFFFFFFF);
+    Hex ((UINT64) mFbPitch, Num);
+    DrawString (40 + 6 * 8 * SCALE, yy, Num, 0xFFFFFFFF);
+    yy += LINE_H;
+
+    DrawString (40, yy, "FB", 0xFFFFFFFF);
+    Hex ((UINT64) (UINTN) mFb, Num);
+    DrawString (40 + 3 * 8 * SCALE, yy, Num, 0xFFFFFFFF);
+  }
+
   Halt ();
 }
 EFI_STATUS
