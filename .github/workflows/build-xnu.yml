@@ -34,6 +34,27 @@ jobs:
           clang --version || true
           sysctl -n hw.ncpu || true
 
+      - name: 抓取 aleph qemu-ios 项目的平台层做法
+        if: always()
+        run: |
+          exec > >(tee -a aleph.log) 2>&1
+          set -x
+          git clone --depth 1 https://github.com/alephsecurity/xnu-qemu-arm64-tools.git || true
+          echo "== 1. 他们的工具仓库结构 =="
+          ls -R xnu-qemu-arm64-tools 2>/dev/null | head -60 || true
+          echo "== 2. 有没有构建 XNU 的脚本 =="
+          find xnu-qemu-arm64-tools -name "*.sh" 2>/dev/null | head -20 || true
+          echo "== 3. 脚本内容（前 80 行）=="
+          for f in $(find xnu-qemu-arm64-tools -name "*.sh" 2>/dev/null | head -3); do
+            echo "--- $f ---"
+            sed -n "1,80p" "$f"
+          done
+          echo "== 4. 有没有平台层/patch 文件 =="
+          find xnu-qemu-arm64-tools -iname "*patch*" -o -iname "*pexpert*" -o -iname "*platform*" 2>/dev/null | head -20 || true
+          echo "== 5. QEMU 仓库里的 XNU 相关 hw 文件 =="
+          git clone --depth 1 https://github.com/alephsecurity/xnu-qemu-arm64.git 2>/dev/null || true
+          find xnu-qemu-arm64/hw -iname "*xnu*" -o -iname "*apple*" 2>/dev/null | head -20 || true
+
       - name: 取 XNU 源码
         run: |
           exec > >(tee -a fetch.log) 2>&1
@@ -185,6 +206,7 @@ jobs:
             build.log
             pack.log
             startup.log
+            aleph.log
             summary.txt
             out/xnu-build-artifacts.tar.bz2
           if-no-files-found: warn
