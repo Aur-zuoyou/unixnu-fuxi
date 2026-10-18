@@ -364,7 +364,7 @@ OnTextOut (
   /* 鍙墦鍗板唴閮ㄥ彉閲? 涓嶇敾浠讳綍涓滆タ 鈥斺€?鎺у埗鍙版枃瀛楁槸鑳界湅鍒扮殑閭ｆ潯閫氶亾 */
   UnicodeSPrint (
     Buf, sizeof (Buf),
-    L"v31 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
+    L"v32 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
     mLocateStatus, (UINT64) mFb, (UINT64) mFbSize,
     mFbW, mFbH, mFbPitch, mGopFmt
     );
@@ -523,6 +523,18 @@ OnTextOut (
       DrawString (40, yy, "FDT", 0xFFFFFFFF);
       Hex (mFdtAddr, Num);
       DrawString (40 + 4 * 8 * SCALE, yy, Num, 0xFFFFFFFF);
+
+      /* 帧缓冲被映射成可缓存内存, 少量分散写不会立刻到显存。
+         这里对每个缓存行做一次"读-改-写", 把脏行挤出去。 */
+      {
+        volatile UINT32  *Pix = (volatile UINT32 *) mFb;
+        UINTN             Total = mFbSize / 4;
+        UINTN             k;
+        for (k = 0; k < Total; k += 16) {
+          UINT32  tmp = Pix[k];
+          Pix[k] = tmp;
+        }
+      }
     }
   }
 
