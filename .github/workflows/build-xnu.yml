@@ -13,7 +13,9 @@ on:
   push:
     paths:
       - ".github/workflows/build-xnu.yml"
-  workflow_dispatch:
+      - "scripts/build-xnu-macos.sh"
+      - "scripts/inspect-xnu-macos.sh"
+  workflow_dispatch:      # 也可以在 Actions 页面手动点 "Run workflow"
 
 jobs:
   build:
