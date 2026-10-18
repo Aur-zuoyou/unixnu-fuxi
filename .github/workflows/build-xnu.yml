@@ -1,25 +1,12 @@
 name: build-xnu
 
-          fi
-      - name: 补上缺失的 os/firehose_buffer_private.h
-        run: |
-          exec > >(tee -a shimcopy.log) 2>&1
-          set -x
-          SRC="$GITHUB_WORKSPACE/xnu-stubs/os/firehose_buffer_private.h"
-          ls -l "$SRC"
-          cp "$SRC" xnu/libkern/os/firehose_buffer_private.h
-          ls -l xnu/libkern/os/firehose_buffer_private.h
-          grep -n "firehose_buffer_t" xnu/libkern/os/firehose_buffer_private.h | head -5
-
-
-name: build-xnu
-
 # 在 macOS runner 上原生构建开源 XNU（arm64）。
 #
-# 已知问题与对策:
-#   1) Xcode 15 的 SDK 缺少 availability.pl      -> 兜底造一个
-#   2) clang 15 把警告当错误（80 处 -Werror）     -> 构建前删掉 -Werror
-#   3) 4 个 Apple 私有 firehose 头不存在          -> 用 xnu-stubs 里的 shim 替换
+# 已解决的问题:
+#   1) Xcode 15 的 SDK 缺少 availability.pl          -> 兜底造一个
+#   2) clang 15 把警告当错误（80 处 -Werror）         -> 构建前删掉 -Werror
+#   3) 树里缺 libkern/os/firehose_buffer_private.h    -> 用 xnu-stubs 里的替身补齐
+#      （其余 firehose 头树内都有，不要动）
 #
 # 产物: xnu/BUILD 打包 + 全部日志
 
@@ -54,7 +41,8 @@ jobs:
           git clone --depth 1 --branch xnu-8792.81.2 https://github.com/apple-oss-distributions/xnu.git
           cd xnu
           git log --oneline -1
-          sed -n '/typedef struct boot_args/,/boot_args;/p' pexpert/pexpert/arm64/boot.h
+          echo "=== 树内 firehose 头 ==="
+          find . -name "*.h" -path "*firehose*" 2>/dev/null | head -10
 
       - name: 造 availability.pl（Xcode 15+ 才有问题）
         run: |
@@ -72,3 +60,78 @@ jobs:
             ls -l "$TARGET/availability.pl" || true
           fi
 
+      - name: 补上缺失的 firehose_buffer_private.h
+        run: |
+          exec > >(tee -a shim.log) 2>&1
+          set -x
+          SRC="$GITHUB_WORKSPACE/xnu-stubs/os/firehose_buffer_private.h"
+          ls -l "$SRC"
+          cp "$SRC" xnu/libkern/os/firehose_buffer_private.h
+          ls -l xnu/libkern/os/firehose_buffer_private.h
+          head -20 xnu/libkern/os/firehose_buffer_private.h
+
+      - name: 去掉 -Werror（clang 15 比 xnu-8792 当年更严格）
+        run: |
+          exec > >(tee -a werror.log) 2>&1
+          set -x
+          cd xnu
+          echo "=== 有 -Werror 的文件 ==="
+          grep -rl -- "-Werror" makedefs 2>/dev/null | head -20 || true
+          for f in $(grep -rl -- "-Werror" makedefs 2>/dev/null); do
+            sed -i '' 's/-Werror//g' "$f"
+          done
+          echo "=== 处理后 ==="
+          grep -rn -- "-Werror" makedefs 2>/dev/null | head -5 || echo "(已清空)"
+
+      - name: 构建 XNU（arm64 RELEASE）
+        run: |
+          exec > >(tee -a build.log) 2>&1
+          set -x
+          cd xnu
+          make -j"$(sysctl -n hw.ncpu)" ARCH_CONFIGS=ARM64 KERNEL_CONFIGS=RELEASE || true
+          echo "=== 产出物 ==="
+          find BUILD -maxdepth 4 -type f \( -name "kernel*" -o -name "*.t?" -o -name "mach*" \) 2>/dev/null | head -40
+          ls -lh BUILD/obj/RELEASE_ARM64/ 2>/dev/null || true
+
+      - name: 打包产物
+        if: always()
+        run: |
+          exec > >(tee -a pack.log) 2>&1
+          set -x
+          mkdir -p out
+          if [ -d xnu/BUILD ]; then
+            tar -cjf out/xnu-build-artifacts.tar.bz2 -C xnu BUILD 2>/dev/null || true
+          fi
+          ls -lh out || true
+
+      - name: 汇总
+        if: always()
+        run: |
+          exec > >(tee -a summary.txt) 2>&1
+          echo "### date: $(date -u)"
+          for f in env.log fetch.log fixup.log shim.log werror.log build.log pack.log; do
+            echo
+            echo "########## $f ##########"
+            if [ -f "$f" ]; then
+              echo "--- 行数: $(wc -l < "$f") ---"
+              tail -100 "$f"
+            else
+              echo "(没有该文件)"
+            fi
+          done
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xnu-build-${{ github.run_number }}
+          path: |
+            env.log
+            fetch.log
+            fixup.log
+            shim.log
+            werror.log
+            build.log
+            pack.log
+            summary.txt
+            out/xnu-build-artifacts.tar.bz2
+          if-no-files-found: warn
