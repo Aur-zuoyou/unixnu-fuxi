@@ -41,6 +41,7 @@ STATIC UINT32      mFbPitch;
 STATIC UINT32      mGopFmt;
 STATIC UINT32      mFbH;
 STATIC EFI_HANDLE  mImageHandle;
+STATIC EFI_STATUS  mLocateStatus;
 
 /* ---------------- 8x8 点阵字体 ---------------- */
 
@@ -331,66 +332,26 @@ OnTextOut (
     return;
   }
 
+  /* 只打印内部变量, 不画任何东西 —— 控制台文字是能看到的那条通道 */
   UnicodeSPrint (
     Buf, sizeof (Buf),
-    L"[fuxi-probe v20] W=%u H=%u PPSL=%u FMT=%u FBSZ=%Lu\r\n",
-    mFbW, mFbH, mFbPitch,
-    (UINT32) (mGopFmt), (UINT64) mFbSize
+    L"v21 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
+    mLocateStatus, (UINT64) mFb, (UINT64) mFbSize,
+    mFbW, mFbH, mFbPitch, mGopFmt
     );
-  for (j = 0; j < 120; j++) {
+  for (j = 0; j < 8; j++) {
     gST->ConOut->OutputString (gST->ConOut, Buf);
     {
       UINTN  k;
-      for (k = 0; k < 3000000UL; k++) {
+      for (k = 0; k < 20000000UL; k++) {
         __asm__ __volatile__ ("");
       }
     }
   }
 
-  for (j = 0; j < 100000000UL; j++) {
-    __asm__ __volatile__ ("");
-  }
-
   LeaveBootServices (mImageHandle);
-
-  /* ---- 裸机绘制: 不刷屏(保留绿底与已打印文字), 先画一个红色探针块 ---- */
-  {
-    CHAR8   ElBuf[4];
-    CHAR8   Num[20];
-    UINT32  yy;
-
-    /* 探针块: 只要它出现, 就说明"绘制代码在裸机环境下能跑" */
-    DrawRect (700, 60, 300, 200, 0xFFFF0000);
-
-    yy = 150;
-    DrawString (40, yy, "M3", 0xFFFFFFFF);
-    yy += LINE_H;
-
-    ElBuf[0] = 'E';
-    ElBuf[1] = 'L';
-    ElBuf[2] = (CHAR8) ('0' + (char) CurrentEl ());
-    ElBuf[3] = 0;
-    DrawString (40, yy, ElBuf, 0xFFFFFFFF);
-    yy += LINE_H;
-
-    DrawString (40, yy, "FDT", 0xFFFFFFFF);
-    Hex (mFdtAddr, Num);
-    DrawString (40 + 4 * 8 * SCALE, yy, Num, 0xFFFFFFFF);
-    yy += LINE_H;
-
-    DrawString (40, yy, "SIZE", 0xFFFFFFFF);
-    Hex ((UINT64) mFdtSize, Num);
-    DrawString (40 + 5 * 8 * SCALE, yy, Num, 0xFFFFFFFF);
-    yy += LINE_H * 2;
-
-    DrawString (40, yy, "PITCH", 0xFFFFFFFF);
-    Hex ((UINT64) mFbPitch, Num);
-    DrawString (40 + 6 * 8 * SCALE, yy, Num, 0xFFFFFFFF);
-  }
-
   Halt ();
 }
-
 EFI_STATUS
 EFIAPI
 ProbeEntry (
@@ -419,6 +380,7 @@ ProbeEntry (
   }
 
   Status = gBS->LocateProtocol (&gEfiGraphicsOutputProtocolGuid, NULL, (VOID **) &Gop);
+  mLocateStatus = Status;
   if (!EFI_ERROR (Status) && Gop != NULL && Gop->Mode != NULL) {
     mFb     = (UINT8 *) (UINTN) Gop->Mode->FrameBufferBase;
     mFbSize = (UINTN) Gop->Mode->FrameBufferSize;
