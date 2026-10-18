@@ -333,7 +333,7 @@ OnTextOut (
 
   UnicodeSPrint (
     Buf, sizeof (Buf),
-    L"[fuxi-probe v18] W=%u H=%u PPSL=%u FMT=%u FBSZ=%Lu\r\n",
+    L"[fuxi-probe v19] W=%u H=%u PPSL=%u FMT=%u FBSZ=%Lu\r\n",
     mFbW, mFbH, mFbPitch,
     (UINT32) (mGopFmt), (UINT64) mFbSize
     );
@@ -353,7 +353,40 @@ OnTextOut (
 
   LeaveBootServices (mImageHandle);
 
-  /* 不擦屏、不画任何东西: 让刚才打印的文字留在屏幕上 */
+  /* ---- 裸机绘制: 用计算出来的真实 stride ---- */
+  {
+    CHAR8   ElBuf[4];
+    CHAR8   Num[20];
+    UINT32  yy;
+
+    Fill (0xFF000000);
+
+    yy = 150;
+    DrawString (40, yy, "M3", 0xFFFFFFFF);
+    yy += LINE_H;
+
+    ElBuf[0] = 'E';
+    ElBuf[1] = 'L';
+    ElBuf[2] = (CHAR8) ('0' + (char) CurrentEl ());
+    ElBuf[3] = 0;
+    DrawString (40, yy, ElBuf, 0xFFFFFFFF);
+    yy += LINE_H;
+
+    DrawString (40, yy, "FDT", 0xFFFFFFFF);
+    Hex (mFdtAddr, Num);
+    DrawString (40 + 4 * 8 * SCALE, yy, Num, 0xFFFFFFFF);
+    yy += LINE_H;
+
+    DrawString (40, yy, "SIZE", 0xFFFFFFFF);
+    Hex ((UINT64) mFdtSize, Num);
+    DrawString (40 + 5 * 8 * SCALE, yy, Num, 0xFFFFFFFF);
+    yy += LINE_H * 2;
+
+    DrawString (40, yy, "PITCH", 0xFFFFFFFF);
+    Hex ((UINT64) mFbPitch, Num);
+    DrawString (40 + 6 * 8 * SCALE, yy, Num, 0xFFFFFFFF);
+  }
+
   Halt ();
 }
 
@@ -390,10 +423,15 @@ ProbeEntry (
     mFbSize = (UINTN) Gop->Mode->FrameBufferSize;
     mFbW     = (UINT32) Gop->Mode->Info->HorizontalResolution;
     mFbH     = (UINT32) Gop->Mode->Info->VerticalResolution;
-    mFbPitch = (UINT32) Gop->Mode->Info->PixelsPerScanLine;
     mGopFmt  = (UINT32) Gop->Mode->Info->PixelFormat;
-    if (mFbPitch < mFbW) {
-      mFbPitch = mFbW;
+    /* GOP 报的 PixelsPerScanLine 不可信(实测 1000 < 宽度 1080)。
+       用帧缓冲总字节数反推真实 stride: FBSZ / 4 / H */
+    mFbPitch = mFbW;
+    if (mFbH != 0 && (mFbSize % ((UINTN) mFbH * 4)) == 0) {
+      UINTN  derived = mFbSize / ((UINTN) mFbH * 4);
+      if (derived >= mFbW && derived < 16384) {
+        mFbPitch = (UINT32) derived;
+      }
     }
   }
   Fill (0xFF00FF00);
