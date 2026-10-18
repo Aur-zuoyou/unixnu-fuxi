@@ -58,29 +58,33 @@ jobs:
             ls -l "$TARGET/availability.pl" || true
           fi
 
-      - name: 用 shim 替换私有 firehose 头
+      - name: 枚举树内真实的 firehose 头文件（只缺 firehose_buffer_private.h）
         run: |
           exec > >(tee -a shim.log) 2>&1
-          set -x
           cd xnu
-          SHIM="$GITHUB_WORKSPACE/xnu-stubs/fuxi_firehose_stub.h"
-          ls -l "$SHIM"
-          cp "$SHIM" libkern/os/fuxi_firehose_stub.h
-          cp "$SHIM" bsd/kern/fuxi_firehose_stub.h
+          echo "########## 1. 树里所有 firehose 相关头 ##########"
+          find . -name "*.h" \( -path "*firehose*" -o -name "firehose*" \) 2>/dev/null | grep -v "^./BUILD" | head -20
 
-          for f in libkern/os/log.c bsd/kern/subr_log.c; do
-            echo "=== $f ==="
-            sed -i '' 's|#include <firehose/tracepoint_private.h>|#include "fuxi_firehose_stub.h"|' "$f"
-            sed -i '' 's|#include <firehose/chunk_private.h>||' "$f"
-            sed -i '' 's|#include <firehose/ioctl_private.h>||' "$f"
-            sed -i '' 's|#include <os/firehose_buffer_private.h>||' "$f"
-            sed -i '' 's|#include <os/firehose.h>||' "$f"
-            grep -n "fuxi_firehose_stub" "$f" | head -3
-          done
+          echo
+          echo "########## 2. tracepoint_private.h 的类型定义区 ##########"
+          sed -n '100,200p' libkern/firehose/tracepoint_private.h 2>/dev/null || echo "(不存在)"
 
-          echo "=== 树内 firehose_types_private.h（前 200 行，供写 shim 参考）==="
-          sed -n '1,200p' libkern/firehose/firehose_types_private.h
+          echo
+          echo "########## 3. chunk_private.h（前 120 行）##########"
+          sed -n '1,120p' libkern/firehose/chunk_private.h 2>/dev/null || echo "(不存在)"
 
+          echo
+          echo "########## 4. ioctl_private.h（前 60 行）##########"
+          sed -n '1,60p' libkern/firehose/ioctl_private.h 2>/dev/null || echo "(不存在)"
+
+          echo
+          echo "########## 5. 代码里用到的 firehose_buffer 相关标识 ##########"
+          grep -ohE "\b(firehose_buffer[a-z_0-9]*|__firehose_buffer[a-z_0-9]*|firehose_push_reply[a-z_0-9]*|FIREHOSE_BUFFER[A-Z_0-9]*)\b" \
+            libkern/os/log.c bsd/kern/subr_log.c 2>/dev/null | sort -u
+
+          echo
+          echo "########## 6. firehose_buffer 的类型在别处有没有定义 ##########"
+          grep -rn "firehose_buffer_t\b" --include="*.h" . 2>/dev/null | grep -v "^./BUILD" | head -10
       - name: 去掉 -Werror（clang 15 比 xnu-8792 当年更严格）
         run: |
           exec > >(tee -a werror.log) 2>&1
