@@ -46,12 +46,16 @@ jobs:
         run: |
           set -euo pipefail
           cd payload
-          # 不用 -pie: AArch64 的寻址本身就是 PC 相对的, 静态链接到 0 即可,
-          # 放到任意地址都能跑。(-pie + 自定义脚本会触发 PHDR 覆盖错误)
-          aarch64-linux-gnu-gcc -ffreestanding -nostdlib \
+          # 不用 -pie、也不用自定义链接脚本（两者都会触发 PHDR 相关问题）。
+          # 直接让 .text 落在地址 0；entry.S 放在编译命令最前，
+          # 所以 _start 就是文件第一个字节。
+          aarch64-linux-gnu-gcc -ffreestanding -nostdlib -static \
             -fno-pic -fno-pie -fno-stack-protector -fno-builtin -mcmodel=small -O2 \
-            -Wl,-N -T link.ld -o kernel.elf entry.S kernel.c
+            -Wl,-Ttext=0 -Wl,--build-id=none \
+            -o kernel.elf entry.S kernel.c
           aarch64-linux-gnu-objcopy -O binary kernel.elf kernel.bin
+          echo "--- 入口应该在 .text 开头 ---"
+          aarch64-linux-gnu-objdump -d kernel.elf | sed -n '1,12p'
           ls -l kernel.elf kernel.bin
           aarch64-linux-gnu-objdump -h kernel.bin 2>/dev/null | head -5 || true
           cd ..

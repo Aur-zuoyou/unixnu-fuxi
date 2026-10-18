@@ -11,7 +11,7 @@
  * 这个文件只做一件事：直接跳到 C 的 kernel_main，保持 x0..x3 不变。
  */
 
-    .section .text.start, "ax"
+    .section .text, "ax"
     .global _start
     .type _start, %function
 _start:
