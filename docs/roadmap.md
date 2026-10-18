@@ -7,7 +7,7 @@
 | **M0** | 工具链与骨架 | `appledt` 自测全过；能合成合法 DTB；loader 代码就位 | ✅ 已完成 | 无 |
 | **M0.5** | 固件解析 + 真机设备树 | 从 vendor_boot/dtbo 抽出 DT 并合并成 4852 节点、校验通过 | ✅ 已完成 | 无 |
 | **M1** | fuxi 上跑起我们的 EFI app | UEFI Shell 里执行后，屏幕打印出 `CurrentEL`、内存描述符数量、DTB 地址 | **QEMU 上已跑通（EL1 / DTB 0xBCB40000 / 1604 字节），待真机** | Renegade UEFI |
-| **M2** | 装载并跳转平坦 payload | 跳转后看到 payload 打印的一行字（UART 或 ramoops） | 1–2 周 | M1 |
+| **M2** | 装载并跳转平坦 payload | 跳转后看到 payload 自己输出 | ✅ 已完成（2026-10-18，payload 刷蓝屏验证 ExitBootServices 后仍在运行） | M1 |
 | **M3** | 设备树校准 | 生成的 DT 与 iPhone X 参考 DT 的节点/属性差异清单收敛到"仅硬件相关" | 1–2 周 | 参考 DT |
 | **M4** | QEMU virt 上跑通 XNU | 虚拟机里看到 XNU 早期启动日志（不是 panic） | 1–2 月 | 无（纯开源） |
 | **M5** | 真机 XNU 早期启动 | fuxi 上 XNU 进入 `PE_init` 之后，panic 信息可读 | 不确定 | M2+M3+M4 |
