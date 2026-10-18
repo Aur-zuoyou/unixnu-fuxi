@@ -63,6 +63,24 @@ jobs:
           echo "=== boot_args 定义 ==="
           sed -n '/typedef struct boot_args/,/boot_args;/p' pexpert/pexpert/arm64/boot.h
 
+      - name: 用 shim 切断对 Apple 私有 firehose 头的依赖
+        run: |
+          exec > >(tee -a shim.log) 2>&1
+          set -x
+          cd xnu
+          SHIM="$GITHUB_WORKSPACE/xnu-stubs/fuxi_firehose_stub.h"
+          ls -l "$SHIM"
+          cp "$SHIM" libkern/os/fuxi_firehose_stub.h
+          cp "$SHIM" bsd/kern/fuxi_firehose_stub.h
+          for f in libkern/os/log.c bsd/kern/subr_log.c; do
+            echo "=== 处理 $f ==="
+            # 把 4 个私有头替换成我们的 shim
+            sed -i '' 's|#include <firehose/tracepoint_private.h>|#include "fuxi_firehose_stub.h"|' "$f" 2>/dev/null || \
+            sed -i 's|#include <firehose/tracepoint_private.h>|#include "fuxi_firehose_stub.h"|' "$f"
+            sed -i '' 's|#include <firehose/chunk_private.h>||; s|#include <firehose/ioctl_private.h>||; s|#include <os/firehose_buffer_private.h>||; s|#include <os/firehose.h>||' "$f" 2>/dev/null || \
+            sed -i 's|#include <firehose/chunk_private.h>||; s|#include <firehose/ioctl_private.h>||; s|#include <os/firehose_buffer_private.h>||; s|#include <os/firehose.h>||' "$f"
+            grep -n "fuxi_firehose_stub\|firehose" "$f" | head -8
+          done
       - name: 去掉 -Werror（Xcode 15 的 clang 比 xnu-8792 当年更严格）
         run: |
           exec > >(tee -a werror.log) 2>&1
@@ -155,6 +173,7 @@ jobs:
             pack.log
             werror.log
             firehose.log
+            shim.log
             summary.txt
             out/xnu-build-artifacts.tar.bz2
           if-no-files-found: warn
