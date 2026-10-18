@@ -146,24 +146,6 @@ jobs:
           grep -rn "kernelsupport" makedefs 2>/dev/null | head -5 || true
           cd ..
 
-      - name: 诊断 start.s 为什么没被编译
-        if: always()
-        run: |
-          exec > >(tee -a startup.log) 2>&1
-          cd xnu
-          echo "== 1. arm64 目录有没有 .o =="
-          ls BUILD/obj/RELEASE_ARM64_VMAPPLE/osfmk/arm64/*.o 2>/dev/null | head -30 || echo "(没有)"
-          echo "== 2. 文件清单里 start.s 的写法 =="
-          grep -rn "start\.s" osfmk/conf/* 2>/dev/null | head -10 || echo "(没有)"
-          echo "== 3. files.arm64 里 arm64/ 开头的项 =="
-          grep -n "arm64/" osfmk/conf/files.arm64 2>/dev/null | head -25 || echo "(没有)"
-          echo "== 4. start.s 里的符号定义 =="
-          grep -n "ENTRY\|_start\|LEAF" osfmk/arm64/start.s 2>/dev/null | head -15 || true
-          echo "== 5. 当前平台定义 =="
-          grep -rn "PLATFORM_VMAPPLE\|VMAPPLE" makedefs/*.def makedefs/*.cmd 2>/dev/null | head -10 || true
-          echo "== 6. LDFILELIST 内容（前 40 行）=="
-          for f in $(find BUILD -name "LDFILELIST*" 2>/dev/null | head -1); do head -40 "$f"; done
-
       - name: 构建 XNU（arm64 RELEASE）
         run: |
           exec > >(tee -a build.log) 2>&1
@@ -180,6 +162,27 @@ jobs:
           echo "=== 产出物 ==="
           find BUILD -maxdepth 4 -type f \( -name "kernel*" -o -name "*.t?" -o -name "mach*" \) 2>/dev/null | head -40
           ls -lh BUILD/obj/RELEASE_ARM64/ 2>/dev/null || true
+
+      - name: 诊断 start.s（构建之后）
+        if: always()
+        run: |
+          exec > >(tee -a startup.log) 2>&1
+          cd xnu
+          echo "== 1. start.o 是否存在 =="
+          find BUILD -name "start.o" 2>/dev/null | head -5 || echo "(没有 start.o)"
+          echo "== 2. config 生成的 Makefile 里有没有 start =="
+          for f in $(find BUILD -name "Makefile" -path "*osfmk*" 2>/dev/null | head -3); do
+            echo "--- $f ---"
+            grep -n "start" "$f" | head -5
+          done
+          echo "== 3. files.arm64 里 start.s 现在长什么样 =="
+          grep -n "arm64/start.s" osfmk/conf/files.arm64 || echo "(没有)"
+          echo "== 4. start.s 内部的平台条件 =="
+          grep -n "VMAPPLE\|XNU_TARGET_OS_OSX\|^#if\|^#endif\|__start" osfmk/arm64/start.s | head -30 || true
+          echo "== 5. 符号表里有没有 __start =="
+          for b in $(find BUILD -name "*.dylib" -o -name "kernel.release*" 2>/dev/null | head -3); do
+            echo "--- $b ---"; nm "$b" 2>/dev/null | grep -i "start" | head -5
+          done
 
       - name: 打包产物
         if: always()
