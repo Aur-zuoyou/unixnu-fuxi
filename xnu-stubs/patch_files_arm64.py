@@ -36,15 +36,23 @@ def patch(path: Path) -> bool:
     for i, line in enumerate(lines):
         if "start.s" not in line or line.lstrip().startswith("#"):
             continue
-        if "arm64/start.s" not in line:
+        # 处理所有带 nos_arm_asm 的行（不只 start.s），
+        # 因为该标记会排除整个 arm64 汇编集合
+        if "nos_arm_asm" not in line:
             continue
 
         print(f"原始第 {i + 1} 行: {line}")
 
-        # 去掉 && IVMAPPLE / && VMAPPLE 之类的平台条件，只留 arm64
-        new = re.sub(r"\s*&&\s*[!A-Z_0-9]*IVMAPPLE[A-Z_0-9]*", "", line)
-        new = re.sub(r"\s*&&\s*[!A-Z_0-9]*VMAPPLE[A-Z_0-9]*", "", new)
-        new = re.sub(r"\s*&&\s*[!A-Z_0-9]*XNU_TARGET_OS_[A-Z_0-9]*", "", new)
+        # 实测这一行是: osfmk/arm64/start.s  optional  nos_arm_asm
+        # nos_arm_asm = "不要 ARM 汇编" 标记，VMAPPLE 构建时被打开，
+        # 导致所有 arm64 汇编（含 start.s）被排除。
+        # 处理办法：把这个标记从条件里删掉，只保留 optional（= 恒编译）。
+        new = line
+        for token in ("nos_arm_asm", "IVMAPPLE", "VMAPPLE"):
+            new = re.sub(r"(?<![A-Za-z_0-9])" + token + r"(?![A-Za-z_0-9])", "", new)
+        new = re.sub(r"\s*&&\s*$", "", new)          # 去掉行尾残留的 &&
+        new = re.sub(r"&&\s+", "", new)              # 去掉中间残留的 &&
+        new = re.sub(r"[ \t]+", "\t", new).rstrip()  # 规整空白（文件用 TAB 分隔）
 
         if new == line:
             # 兜底：把 optional 之后的条件整段删掉，只保留 arch
@@ -80,6 +88,20 @@ def main() -> int:
 
     if not any_change:
         print("警告: 没有匹配到 start.s 的条件行，需要人工确认 files.arm64 的内容")
+
+    # 找出 nos_arm_asm 在哪里被定义（便于彻底关掉它）
+    print()
+    print("== nos_arm_asm 的定义位置 ==")
+    import subprocess
+    try:
+        out = subprocess.run(
+            ["grep", "-rn", "nos_arm_asm", str(root / "makedefs"), str(root / "osfmk" / "conf")],
+            capture_output=True, text=True)
+        for ln in (out.stdout or "").split("\n")[:20]:
+            if ln.strip():
+                print("  ", ln)
+    except Exception as exc:      # noqa: BLE001
+        print("  (grep 失败:", exc, ")")
     return 0
 
 
