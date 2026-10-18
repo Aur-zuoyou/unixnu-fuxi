@@ -85,3 +85,7 @@ PSCI `smc`、定时器 `/soc/timer`。
 - 不解析、不解密、不分发苹果的加密二进制（kernelcache、根文件系统）
 - 不绕过激活锁、不做"解锁服务"
 - 不提供"一键刷机包"
+
+## 2026-10-18 暂停记录
+
+G1（XNU 交叉编译）暂停，原因与结论见 docs/RESUME.md 与 docs/m6-xnu-plan.md。
