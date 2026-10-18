@@ -1,21 +1,19 @@
 /** @file  Probe.c
 
-  fuxi 探针 v10 —— M2 的第一步: 离开 Boot Services 之后还能不能跑?
+  fuxi 探针 v11 —— M3: 裸机 payload 自己画字
 
   已知:
-    EL1, GOP 可用, 帧缓冲可写, 文字输出在 SimpleTextOut 出现后可用。
+    M1: EL1 / GOP 可用 / 能打印
+    M2: ExitBootServices 之后仍能运行(整屏刷蓝)
 
-  v10 流程:
-    1. 刷绿 + 打印 EL/FDT           (Boot Services 还活着)
-    2. 忙等约 3 秒                   (让人看清绿屏和文字)
-    3. ExitBootServices             (此后 gBS/gRT 全部失效)
-    4. 跳到自己的 payload: 把屏幕刷成蓝色, 然后停住
-    5. payload 里只做"直接写物理内存"这一件事, 不调用任何 UEFI 服务
+  问题: 退出 Boot Services 后没有控制台, 想输出只能自己往显存画像素。
+  v11 就做这件事: 内置 8x8 点阵字体, 放大 6 倍画到帧缓冲。
 
-  判据:
-    绿屏+文字 -> 3 秒后变蓝  => 我们在"没有 Boot Services"的环境里跑起来了,
-                                 这就是内核将来所处的环境。
-    只变绿不出字 / 不变蓝     => ExitBootServices 失败或跳转出错(见代码注释)。
+  预期屏幕: 蓝底 + 白色文字
+      M3
+      EL1
+      FDT=0X........
+      SIZE0X........
 **/
 
 #include <Uefi.h>
@@ -27,15 +25,72 @@
 #include <Library/PrintLib.h>
 #include <Protocol/GraphicsOutput.h>
 
+#define SCALE      6
+#define LINE_H     (8 * SCALE + 24)
+
 STATIC EFI_GUID  mFdtTableGuid = {
   0xb1b621d5, 0xf19c, 0x41a5, { 0x83, 0x0b, 0xd9, 0x15, 0x2c, 0x69, 0xaa, 0xe0 }
 };
 
-STATIC UINTN   mFdtAddr;
-STATIC UINT32  mFdtSize;
-STATIC UINT8  *mFb;
+STATIC UINTN       mFdtAddr;
+STATIC UINT32      mFdtSize;
+STATIC UINT8      *mFb;
+STATIC UINTN       mFbSize;
+STATIC UINT32      mFbW;
+STATIC UINT32      mFbH;
 STATIC EFI_HANDLE  mImageHandle;
-STATIC UINTN   mFbSize;
+
+/* ---------------- 8x8 点阵字体 ---------------- */
+
+STATIC CONST CHAR8  CHARSET[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ :-=.()x/";
+
+STATIC CONST UINT8  FONT[][8] = {
+  { 0x3C,0x66,0x6E,0x76,0x66,0x66,0x3C,0x00 }, /* 0 */
+  { 0x18,0x38,0x18,0x18,0x18,0x18,0x7E,0x00 }, /* 1 */
+  { 0x3C,0x66,0x06,0x0C,0x30,0x60,0x7E,0x00 }, /* 2 */
+  { 0x3C,0x66,0x06,0x1C,0x06,0x66,0x3C,0x00 }, /* 3 */
+  { 0x0C,0x1C,0x3C,0x6C,0x7E,0x0C,0x0C,0x00 }, /* 4 */
+  { 0x7E,0x60,0x7C,0x06,0x06,0x66,0x3C,0x00 }, /* 5 */
+  { 0x3C,0x66,0x60,0x7C,0x66,0x66,0x3C,0x00 }, /* 6 */
+  { 0x7E,0x66,0x0C,0x18,0x18,0x18,0x18,0x00 }, /* 7 */
+  { 0x3C,0x66,0x66,0x3C,0x66,0x66,0x3C,0x00 }, /* 8 */
+  { 0x3C,0x66,0x66,0x3E,0x06,0x66,0x3C,0x00 }, /* 9 */
+  { 0x18,0x3C,0x66,0x66,0x7E,0x66,0x66,0x00 }, /* A */
+  { 0x7C,0x66,0x66,0x7C,0x66,0x66,0x7C,0x00 }, /* B */
+  { 0x3C,0x66,0x60,0x60,0x60,0x66,0x3C,0x00 }, /* C */
+  { 0x78,0x6C,0x66,0x66,0x66,0x6C,0x78,0x00 }, /* D */
+  { 0x7E,0x60,0x60,0x7C,0x60,0x60,0x7E,0x00 }, /* E */
+  { 0x7E,0x60,0x60,0x7C,0x60,0x60,0x60,0x00 }, /* F */
+  { 0x3C,0x66,0x60,0x6E,0x66,0x66,0x3E,0x00 }, /* G */
+  { 0x66,0x66,0x66,0x7E,0x66,0x66,0x66,0x00 }, /* H */
+  { 0x3C,0x18,0x18,0x18,0x18,0x18,0x3C,0x00 }, /* I */
+  { 0x1E,0x0C,0x0C,0x0C,0x0C,0x6C,0x38,0x00 }, /* J */
+  { 0x66,0x6C,0x78,0x70,0x78,0x6C,0x66,0x00 }, /* K */
+  { 0x60,0x60,0x60,0x60,0x60,0x60,0x7E,0x00 }, /* L */
+  { 0x63,0x77,0x7F,0x6B,0x63,0x63,0x63,0x00 }, /* M */
+  { 0x66,0x76,0x7E,0x7E,0x6E,0x66,0x66,0x00 }, /* N */
+  { 0x3C,0x66,0x66,0x66,0x66,0x66,0x3C,0x00 }, /* O */
+  { 0x7C,0x66,0x66,0x7C,0x60,0x60,0x60,0x00 }, /* P */
+  { 0x3C,0x66,0x66,0x66,0x6E,0x3C,0x0E,0x00 }, /* Q */
+  { 0x7C,0x66,0x66,0x7C,0x78,0x6C,0x66,0x00 }, /* R */
+  { 0x3C,0x66,0x60,0x3C,0x06,0x66,0x3C,0x00 }, /* S */
+  { 0x7E,0x18,0x18,0x18,0x18,0x18,0x18,0x00 }, /* T */
+  { 0x66,0x66,0x66,0x66,0x66,0x66,0x3C,0x00 }, /* U */
+  { 0x66,0x66,0x66,0x66,0x66,0x3C,0x18,0x00 }, /* V */
+  { 0x63,0x63,0x63,0x6B,0x7F,0x77,0x63,0x00 }, /* W */
+  { 0x66,0x66,0x3C,0x18,0x3C,0x66,0x66,0x00 }, /* X */
+  { 0x66,0x66,0x66,0x3C,0x18,0x18,0x18,0x00 }, /* Y */
+  { 0x7E,0x06,0x0C,0x18,0x30,0x60,0x7E,0x00 }, /* Z */
+  { 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00 }, /* sp */
+  { 0x00,0x00,0x18,0x00,0x00,0x18,0x00,0x00 }, /* :  */
+  { 0x00,0x00,0x7E,0x00,0x7E,0x00,0x00,0x00 }, /* =  */
+  { 0x00,0x00,0x00,0x7E,0x00,0x00,0x00,0x00 }, /* -  */
+  { 0x00,0x00,0x00,0x00,0x00,0x18,0x18,0x00 }, /* .  */
+  { 0x0C,0x18,0x30,0x30,0x30,0x18,0x0C,0x00 }, /* (  */
+  { 0x30,0x18,0x0C,0x0C,0x0C,0x18,0x30,0x00 }, /* )  */
+  { 0x00,0x66,0x3C,0x18,0x3C,0x66,0x00,0x00 }, /* x  */
+  { 0x06,0x0C,0x18,0x30,0x60,0x00,0x00,0x00 }, /* /  */
+};
 
 STATIC
 UINT64
@@ -60,44 +115,122 @@ Halt (
 }
 
 STATIC
+UINTN
+GlyphIndex (
+  IN CHAR8  Ch
+  )
+{
+  UINTN  i;
+
+  for (i = 0; CHARSET[i] != 0; i++) {
+    if (CHARSET[i] == Ch) {
+      return i;
+    }
+  }
+  return 36;
+}
+
+STATIC
 VOID
-FillColor (
+PutPixel (
+  IN UINT32  X,
+  IN UINT32  Y,
   IN UINT32  Color
   )
 {
-  UINT32  *Pix;
-  UINTN    Count;
-  UINTN    i;
+  volatile UINT32  *P;
+
+  if (mFb == NULL || X >= mFbW || Y >= mFbH) {
+    return;
+  }
+  P    = (volatile UINT32 *) mFb;
+  P   += (UINTN) Y * mFbW + X;
+  *P   = Color;
+}
+
+STATIC
+VOID
+Fill (
+  IN UINT32  Color
+  )
+{
+  volatile UINT32  *Pix;
+  UINTN             Count;
+  UINTN             i;
 
   if (mFb == NULL || mFbSize < 4) {
     return;
   }
-  Pix   = (UINT32 *) mFb;
+  Pix   = (volatile UINT32 *) mFb;
   Count = mFbSize / 4;
   for (i = 0; i < Count; i++) {
     Pix[i] = Color;
   }
 }
 
-/** 离开 Boot Services 之后的"内核式"入口: 只用物理内存, 不碰任何 UEFI 服务 */
 STATIC
 VOID
-__attribute__((noreturn))
-Payload (
-  IN UINT8  *Fb,
-  IN UINTN   FbSize
+DrawChar (
+  IN UINT32  X,
+  IN UINT32  Y,
+  IN CHAR8   Ch,
+  IN UINT32  Color
   )
 {
-  volatile UINT32  *Pix   = (volatile UINT32 *) Fb;
-  volatile UINTN    Count = FbSize / 4;
-  volatile UINTN    i;
+  CONST UINT8  *Glyph = FONT[GlyphIndex (Ch)];
+  UINT32        Row;
+  UINT32        Col;
+  UINT32        dy;
+  UINT32        dx;
 
-  for (i = 0; i < Count; i++) {
-    Pix[i] = 0xFF0000FF;      /* 蓝: 与"绿"区分, 表示已是裸机环境 */
+  for (Row = 0; Row < 8; Row++) {
+    for (Col = 0; Col < 8; Col++) {
+      if ((Glyph[Row] & (0x80 >> Col)) == 0) {
+        continue;
+      }
+      for (dy = 0; dy < SCALE; dy++) {
+        for (dx = 0; dx < SCALE; dx++) {
+          PutPixel (X + Col * SCALE + dx, Y + Row * SCALE + dy, Color);
+        }
+      }
+    }
   }
-  for ( ; ; ) {
-    __asm__ __volatile__ ("wfi");
+}
+
+STATIC
+VOID
+DrawString (
+  IN UINT32        X,
+  IN UINT32        Y,
+  IN CONST CHAR8  *Str,
+  IN UINT32        Color
+  )
+{
+  UINT32  x = X;
+
+  while (*Str != 0) {
+    DrawChar (x, Y, *Str, Color);
+    x += 8 * SCALE;
+    Str++;
   }
+}
+
+STATIC
+VOID
+Hex (
+  IN  UINT64  Value,
+  OUT CHAR8  *Out
+  )
+{
+  STATIC CONST CHAR8  Digits[] = "0123456789ABCDEF";
+  UINTN               i;
+
+  Out[0] = '0';
+  Out[1] = 'X';
+  for (i = 0; i < 16; i++) {
+    Out[2 + i] = Digits[(Value >> ((15 - i) * 4)) & 0xF];
+  }
+  Out[18] = 0;
 }
 
 STATIC
@@ -148,36 +281,43 @@ OnTextOut (
   IN VOID      *Context
   )
 {
-  CHAR16      Buf[192];
-  EFI_STATUS  Status;
-  volatile UINTN j;
+  CHAR16  Buf[160];
+  CHAR8   HexBuf[20];
+  UINTN   j;
+  UINT32  y;
 
   (VOID) Event;
   (VOID) Context;
-  (VOID) Status;
 
   if (gST == NULL || gST->ConOut == NULL) {
     return;
   }
 
-  UnicodeSPrint (
-    Buf, sizeof (Buf),
-    L"\r\n[fuxi-probe v10] EL%Lu  FDT=0x%Lx (%Lu bytes)\r\n"
-    L"leaving boot services in ~3s, screen will turn BLUE\r\n",
-    CurrentEl (), (UINT64) mFdtAddr, (UINT64) mFdtSize
-    );
+  UnicodeSPrint (Buf, sizeof (Buf), L"[fuxi-probe v11] going bare-metal...\r\n");
   gST->ConOut->OutputString (gST->ConOut, Buf);
 
-  /* 忙等, 让人看清绿屏和文字 */
-  for (j = 0; j < 200000000UL; j++) {
+  for (j = 0; j < 100000000UL; j++) {
     __asm__ __volatile__ ("");
   }
 
-  Status = LeaveBootServices (mImageHandle);
-  (VOID) Status;
+  LeaveBootServices (mImageHandle);
 
-  /* 到这里 Boot Services 已失效, 只能直接写物理内存 */
-  Payload (mFb, mFbSize);
+  /* ---- 裸机: 只用内存 ---- */
+  Fill (0xFF000000);
+  y = 100;
+  DrawString (40, y, "M3", 0xFFFFFFFF);
+  y += LINE_H;
+  DrawString (40, y, "EL1", 0xFFFFFFFF);
+  y += LINE_H;
+  DrawString (40, y, "FDT", 0xFFFFFFFF);
+  Hex (mFdtAddr, HexBuf);
+  DrawString (40 + 4 * 8 * SCALE, y, HexBuf, 0xFFFFFFFF);
+  y += LINE_H;
+  DrawString (40, y, "SIZE", 0xFFFFFFFF);
+  Hex ((UINT64) mFdtSize, HexBuf);
+  DrawString (40 + 5 * 8 * SCALE, y, HexBuf, 0xFFFFFFFF);
+
+  Halt ();
 }
 
 EFI_STATUS
@@ -211,8 +351,10 @@ ProbeEntry (
   if (!EFI_ERROR (Status) && Gop != NULL && Gop->Mode != NULL) {
     mFb     = (UINT8 *) (UINTN) Gop->Mode->FrameBufferBase;
     mFbSize = (UINTN) Gop->Mode->FrameBufferSize;
+    mFbW    = (UINT32) Gop->Mode->Info->HorizontalResolution;
+    mFbH    = (UINT32) Gop->Mode->Info->VerticalResolution;
   }
-  FillColor (0xFF00FF00);
+  Fill (0xFF00FF00);
 
   Status = gBS->CreateEvent (EVT_NOTIFY_SIGNAL, TPL_CALLBACK, OnTextOut, NULL, &Event);
   if (EFI_ERROR (Status)) {
