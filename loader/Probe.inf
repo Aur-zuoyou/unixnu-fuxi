@@ -1,5 +1,5 @@
 ## @file
-#  fuxi 探针 v9 (Depex=GOP; 等 SimpleTextOut 出现后再打印)
+#  fuxi 探针 v10 (M2: ExitBootServices 后跳 payload 刷蓝屏)
 ##
 
 [Defines]
@@ -7,7 +7,7 @@
   BASE_NAME                      = FuxiProbe
   FILE_GUID                      = 9c4e2a71-3d85-4f0b-8a6e-1b7d5c2e9f34
   MODULE_TYPE                    = DXE_DRIVER
-  VERSION_STRING                 = 0.9
+  VERSION_STRING                 = 0.10
   ENTRY_POINT                    = ProbeEntry
 
 [Sources]
@@ -25,6 +25,7 @@
   UefiBootServicesTableLib
   BaseLib
   BaseMemoryLib
+  MemoryAllocationLib
   PrintLib
   DebugLib
 
