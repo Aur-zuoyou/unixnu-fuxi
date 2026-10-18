@@ -182,6 +182,17 @@ jobs:
           echo
           echo "### diag 结束"
 
+      - name: 写 version.txt（这个产物对应哪个提交）
+        run: |
+          cd edk2-msm
+          {
+            echo "commit: ${{ github.sha }}"
+            echo "run:    ${{ github.run_number }}"
+            echo "date:   $(date -u)"
+            echo "granularity-patch-count: $(grep -c 'RUNTIME_PAGE_ALLOCATION_GRANULARITY 1' Common/edk2/MdeModulePkg/Core/Dxe/Mem/Page.c 2>/dev/null || echo 0)"
+            echo "img-size: $(stat -c%s boot-fuxi.img 2>/dev/null)"
+          } > version.txt
+          cat version.txt
       - name: 检查产物
         run: |
           ls -lh edk2-msm/*.img || true
@@ -192,10 +203,11 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: fuxi-uefi
+          name: fuxi-uefi-${{ github.run_number }}
           path: |
             edk2-msm/boot-fuxi.img
             edk2-msm/uefi-fuxi*.img
             edk2-msm/diag.txt
+            edk2-msm/version.txt
             build.log
           if-no-files-found: error
