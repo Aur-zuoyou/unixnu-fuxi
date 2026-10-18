@@ -37,6 +37,8 @@ STATIC UINT32      mFdtSize;
 STATIC UINT8      *mFb;
 STATIC UINTN       mFbSize;
 STATIC UINT32      mFbW;
+STATIC UINT32      mFbPitch;
+STATIC UINT32      mGopFmt;
 STATIC UINT32      mFbH;
 STATIC EFI_HANDLE  mImageHandle;
 
@@ -144,7 +146,7 @@ PutPixel (
     return;
   }
   P    = (volatile UINT32 *) mFb;
-  P   += (UINTN) Y * mFbW + X;
+  P   += (UINTN) Y * mFbPitch + X;
   *P   = Color;
 }
 
@@ -312,7 +314,12 @@ OnTextOut (
     return;
   }
 
-  UnicodeSPrint (Buf, sizeof (Buf), L"[fuxi-probe v11] going bare-metal...\r\n");
+  UnicodeSPrint (
+    Buf, sizeof (Buf),
+    L"[fuxi-probe v13] W=%u H=%u PPSL=%u FMT=%u FBSZ=%Lu\r\n",
+    mFbW, mFbH, mFbPitch,
+    (UINT32) (mGopFmt), (UINT64) mFbSize
+    );
   gST->ConOut->OutputString (gST->ConOut, Buf);
 
   for (j = 0; j < 100000000UL; j++) {
@@ -385,8 +392,13 @@ ProbeEntry (
   if (!EFI_ERROR (Status) && Gop != NULL && Gop->Mode != NULL) {
     mFb     = (UINT8 *) (UINTN) Gop->Mode->FrameBufferBase;
     mFbSize = (UINTN) Gop->Mode->FrameBufferSize;
-    mFbW    = (UINT32) Gop->Mode->Info->HorizontalResolution;
-    mFbH    = (UINT32) Gop->Mode->Info->VerticalResolution;
+    mFbW     = (UINT32) Gop->Mode->Info->HorizontalResolution;
+    mFbH     = (UINT32) Gop->Mode->Info->VerticalResolution;
+    mFbPitch = (UINT32) Gop->Mode->Info->PixelsPerScanLine;
+    mGopFmt  = (UINT32) Gop->Mode->Info->PixelFormat;
+    if (mFbPitch < mFbW) {
+      mFbPitch = mFbW;
+    }
   }
   Fill (0xFF00FF00);
 
