@@ -94,7 +94,7 @@ STATIC CONST UINT8  FONT[][8] = {
   { 0x06,0x0C,0x18,0x30,0x60,0x00,0x00,0x00 }, /* /  */
 };
 
-STATIC
+STATIC __attribute__((unused))
 UINT64
 CurrentEl (
   VOID
@@ -105,7 +105,7 @@ CurrentEl (
   return (Val >> 2) & 0x3;
 }
 
-STATIC
+STATIC __attribute__((unused))
 VOID
 Halt (
   VOID
@@ -116,7 +116,7 @@ Halt (
   }
 }
 
-STATIC
+STATIC __attribute__((unused))
 UINTN
 GlyphIndex (
   IN CHAR8  Ch
@@ -132,7 +132,7 @@ GlyphIndex (
   return 36;
 }
 
-STATIC
+STATIC __attribute__((unused))
 VOID
 PutPixel (
   IN UINT32  X,
@@ -150,7 +150,7 @@ PutPixel (
   *P   = Color;
 }
 
-STATIC
+STATIC __attribute__((unused))
 VOID
 Fill (
   IN UINT32  Color
@@ -170,7 +170,7 @@ Fill (
   }
 }
 
-STATIC
+STATIC __attribute__((unused))
 VOID
 DrawRect (
   IN UINT32  X,
@@ -190,7 +190,7 @@ DrawRect (
   }
 }
 /** 把 16 位数值画成一排色块: 亮=1 暗=0。即使字体坏了也能读数字。 */
-STATIC
+STATIC __attribute__((unused))
 VOID
 DrawBits (
   IN UINT32  X,
@@ -206,7 +206,7 @@ DrawBits (
     DrawRect (X + i * 56, Y, 44, 80, On ? 0xFFFFFFFF : 0xFF202020);
   }
 }
-STATIC
+STATIC __attribute__((unused))
 VOID
 DrawChar (
   IN UINT32  X,
@@ -235,7 +235,7 @@ DrawChar (
   }
 }
 
-STATIC
+STATIC __attribute__((unused))
 VOID
 DrawString (
   IN UINT32        X,
@@ -253,7 +253,7 @@ DrawString (
   }
 }
 
-STATIC
+STATIC __attribute__((unused))
 VOID
 Hex (
   IN  UINT64  Value,
@@ -311,7 +311,7 @@ LeaveBootServices (
   return Status;
 }
 
-STATIC
+STATIC __attribute__((unused))
 VOID
 EFIAPI
 OnTextOut (
