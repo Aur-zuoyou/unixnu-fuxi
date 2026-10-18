@@ -272,7 +272,7 @@ Hex (
   Out[18] = 0;
 }
 
-STATIC
+STATIC __attribute__((unused))
 EFI_STATUS
 LeaveBootServices (
   IN EFI_HANDLE  ImageHandle
