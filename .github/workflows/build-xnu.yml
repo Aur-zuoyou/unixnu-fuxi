@@ -1,13 +1,14 @@
 name: build-xnu
 
-# 目标: 在 Linux CI 上交叉编译开源 XNU（arm64），拿到可跳转的二进制。
+# 目标: 在 Linux CI 上做出可跳转的开源 XNU（arm64）。
 #
-# 现状（2026-10-18 第一轮探测结果）:
-#   - XNU 源码 xnu-8792.81.2 能拉到（commit 19c3b8c）
-#   - pexpert/arm64/boot.h 与我们的 boot_args 完全一致
-#   - cctools / XNU 构建步骤没有产出日志 -> 步骤本身失败, 已改用 exec+tee 写法
+# 两轮探测的结论（2026-10-18）：
+#   1) XNU 源码能拉，pexpert/arm64/boot.h 与我们的 boot_args 完全一致
+#   2) cctools 需要 libBlocksRuntime（apt: libblocksruntime-dev）
+#   3) XNU 自带的 Makefile 需要 macOS 工具链（xcrun / sw_vers / 系统 sysctl），
+#      在 Linux 上直接 make 必然失败
 #
-# 本工作流故意不硬失败, 每步都写日志并上传, 便于逐条推进。
+# 因此改为：借用 alephsecurity/xnu-qemu-arm64 已经解决过这件事的 SDK 与脚本。
 
 on:
   push:
@@ -18,7 +19,7 @@ on:
 jobs:
   probe:
     runs-on: ubuntu-22.04
-    timeout-minutes: 150
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
 
@@ -30,34 +31,31 @@ jobs:
             build-essential cmake ninja-build clang lld llvm \
             python3 git curl ca-certificates \
             libssl-dev uuid-dev bison flex libxml2-dev zlib1g-dev \
-            autoconf automake libtool
+            autoconf automake libtool libblocksruntime-dev libbsd-dev \
+            device-tree-compiler
 
-      - name: 取 XNU 源码
+      - name: 取 xnu-qemu-arm64（含 SDK 与构建脚本）
         run: |
-          exec > >(tee -a xnu-fetch.log) 2>&1
+          exec > >(tee -a qemuarm64-fetch.log) 2>&1
           set -x
-          git clone --depth 1 --branch xnu-8792.81.2 \
-            https://github.com/apple-oss-distributions/xnu.git || true
-          ls xnu | head -40
-          echo "=== boot.h 里的 boot_args ==="
-          sed -n '/typedef struct boot_args/,/boot_args;/p' xnu/pexpert/pexpert/arm64/boot.h || true
-          echo "=== 构建文档 ==="
-          ls xnu/doc | head -20 || true
-          echo "=== SETUP 文件 ==="
-          ls -l xnu/SETUP || true
+          git clone --depth 1 https://github.com/alephsecurity/xnu-qemu-arm64.git || true
+          ls xnu-qemu-arm64 | head -40
+          echo "=== 顶层脚本 ==="
+          ls -l xnu-qemu-arm64/*.sh 2>/dev/null || true
+          echo "=== build.sh 内容 ==="
+          for f in xnu-qemu-arm64/build.sh xnu-qemu-arm64/build-linux.sh xnu-qemu-arm64/scripts/*.sh; do
+            if [ -f "$f" ]; then echo "--- $f ---"; sed -n '1,60p' "$f"; fi
+          done
+          echo "=== 是否有 sdk 目录 ==="
+          find xnu-qemu-arm64 -maxdepth 2 -iname "*sdk*" 2>/dev/null | head -10
+          echo "=== README 前 60 行 ==="
+          sed -n '1,60p' xnu-qemu-arm64/README.md 2>/dev/null || true
 
-      - name: 取 cctools-port（Linux 上的 ld64/as）
-        run: |
-          exec > >(tee -a cctools-fetch.log) 2>&1
-          set -x
-          git clone --depth 1 https://github.com/tpoechtrager/cctools-port.git || true
-          ls cctools-port
-          ls cctools-port/cctools | head -30
-
-      - name: 构建 cctools
+      - name: 取 cctools-port 并构建（这次装了 libBlocksRuntime）
         run: |
           exec > >(tee -a cctools-build.log) 2>&1
           set -x
+          git clone --depth 1 https://github.com/tpoechtrager/cctools-port.git || true
           cd cctools-port/cctools
           ./autogen.sh || true
           ./configure --prefix=/opt/cctools --target=aarch64-apple-darwin || true
@@ -66,25 +64,31 @@ jobs:
           ls -l /opt/cctools/bin || true
           /opt/cctools/bin/ld64 -v || true
 
-      - name: 构建 XNU（arm64）
+      - name: 尝试按 xnu-qemu-arm64 的方式构建
         run: |
           exec > >(tee -a xnu-build.log) 2>&1
           set -x
           export PATH=/opt/cctools/bin:$PATH
-          cd xnu
-          make -j"$(nproc)" ARCH_CONFIGS=ARM64 KERNEL_CONFIGS=RELEASE || true
+          cd xnu-qemu-arm64 || exit 0
+          if [ -f build.sh ]; then
+            echo "=== 运行 build.sh ==="
+            chmod +x build.sh || true
+            ./build.sh || true
+          fi
+          echo "=== 产出物查找 ==="
+          find . -maxdepth 3 -name "*.bin" -o -maxdepth 3 -name "kernel*" -o -maxdepth 3 -name "*.img" 2>/dev/null | head -20
 
       - name: 汇总
         if: always()
         run: |
           exec > >(tee -a summary.txt) 2>&1
           echo "### date: $(date -u)"
-          for f in xnu-fetch.log cctools-fetch.log cctools-build.log xnu-build.log; do
+          for f in qemuarm64-fetch.log cctools-build.log xnu-build.log; do
             echo
             echo "########## $f ##########"
             if [ -f "$f" ]; then
               echo "--- 行数: $(wc -l < "$f") ---"
-              tail -80 "$f"
+              tail -100 "$f"
             else
               echo "(没有该文件)"
             fi
@@ -95,8 +99,7 @@ jobs:
         with:
           name: xnu-logs-${{ github.run_number }}
           path: |
-            xnu-fetch.log
-            cctools-fetch.log
+            qemuarm64-fetch.log
             cctools-build.log
             xnu-build.log
             summary.txt
