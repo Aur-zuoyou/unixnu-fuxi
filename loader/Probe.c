@@ -364,7 +364,7 @@ OnTextOut (
   /* 鍙墦鍗板唴閮ㄥ彉閲? 涓嶇敾浠讳綍涓滆タ 鈥斺€?鎺у埗鍙版枃瀛楁槸鑳界湅鍒扮殑閭ｆ潯閫氶亾 */
   UnicodeSPrint (
     Buf, sizeof (Buf),
-    L"v30 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
+    L"v31 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
     mLocateStatus, (UINT64) mFb, (UINT64) mFbSize,
     mFbW, mFbH, mFbPitch, mGopFmt
     );
@@ -492,7 +492,37 @@ OnTextOut (
         }
       }
     } else {
-      Fill (0xFF0000FF);     /* 退成功: 控制台没了, 用刷屏证明 */
+      /* 退出成功: 控制台已经没了, 用自己画的点阵字体输出信息 (M3) */
+      CHAR8   Num[20];
+      CHAR8   ElBuf[4];
+      UINT32  yy;
+
+      Fill (0xFF000000);
+
+      yy = 120;
+      DrawString (40, yy, "M3", 0xFFFFFFFF);
+      yy += LINE_H;
+
+      ElBuf[0] = 'E';
+      ElBuf[1] = 'L';
+      ElBuf[2] = (CHAR8) ('0' + (char) CurrentEl ());
+      ElBuf[3] = 0;
+      DrawString (40, yy, ElBuf, 0xFFFFFFFF);
+      yy += LINE_H;
+
+      DrawString (40, yy, "PITCH", 0xFFFFFFFF);
+      Hex ((UINT64) mFbPitch, Num);
+      DrawString (40 + 6 * 8 * SCALE, yy, Num, 0xFFFFFFFF);
+      yy += LINE_H;
+
+      DrawString (40, yy, "FB", 0xFFFFFFFF);
+      Hex ((UINT64) (UINTN) mFb, Num);
+      DrawString (40 + 3 * 8 * SCALE, yy, Num, 0xFFFFFFFF);
+      yy += LINE_H;
+
+      DrawString (40, yy, "FDT", 0xFFFFFFFF);
+      Hex (mFdtAddr, Num);
+      DrawString (40 + 4 * 8 * SCALE, yy, Num, 0xFFFFFFFF);
     }
   }
 
