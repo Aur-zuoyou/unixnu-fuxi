@@ -1,16 +1,13 @@
 name: build-xnu
 
-# 目标: 在 Linux CI 上编出可跳转的开源 XNU（arm64）—— 用户选择"继续攻真机"。
+# 在 macOS runner 上原生构建开源 XNU（arm64）。
 #
-# 已知（三轮探测）:
-#   1) XNU 源码 xnu-8792.81.2 可拉；boot.h 与我们的 boot_args 完全一致
-#   2) XNU 自带 Makefile 需要 macOS 工具（xcrun/sw_vers）与 SDK 头文件
-#   3) cctools configure 要求 libdispatch（Linux 上没有现成包）
+# 为什么换 macOS：
+#   XNU 自带的 Makefile 依赖 xcrun / macOS SDK / macOS 的 sysctl 语义，
+#   在 Linux 上模拟这些是无底洞。GitHub Actions 提供 macos-14（自带 Xcode），
+#   这是 Apple 官方支持的构建方式。
 #
-# 本轮策略:
-#   A. 绕过 libdispatch 检查，先把 ld64 弄出来
-#   B. 造 xcrun / sw_vers 假工具 + 空 SDK 目录
-#   C. make -k 强跑，一次性收集大量缺失头文件（每轮换最多信息）
+# 产物：BUILD/obj/RELEASE_ARM64 下的 kernel 相关文件 + 完整构建日志
 
 on:
   push:
@@ -19,109 +16,61 @@ on:
   workflow_dispatch:
 
 jobs:
-  probe:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 180
+  build:
+    runs-on: macos-14
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
 
-      - name: 安装依赖
+      - name: 环境信息
         run: |
-          set -x
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential cmake ninja-build clang lld llvm \
-            python3 git curl ca-certificates \
-            libssl-dev uuid-dev bison flex libxml2-dev zlib1g-dev \
-            autoconf automake libtool libblocksruntime-dev libbsd-dev
+          exec > >(tee -a env.log) 2>&1
+          sw_vers
+          xcode-select -p
+          clang --version || true
+          uname -a
+          sysctl -n hw.ncpu || true
+          df -h /
 
-      - name: 构建 cctools（绕过 libdispatch 检查）
+      - name: 取 XNU 源码
         run: |
-          exec > >(tee -a cctools-build.log) 2>&1
+          exec > >(tee -a fetch.log) 2>&1
           set -x
-          git clone --depth 1 https://github.com/tpoechtrager/cctools-port.git || true
-          cd cctools-port/cctools
-          ./autogen.sh || true
-          # configure 里有 "Required library libdispatch not installed" 的硬检查，
-          # 我们只需要 ld64/as，不需要 blocks/dispatch：把该检查改成警告。
-          if [ -f configure ]; then
-            sed -i 's/Required library libdispatch not installed.*/echo "WARN: skip libdispatch"/' configure || true
-            sed -i 's/ac_define(\[HAVE_LIBDISPATCH\], 1)/:/' configure || true
-          fi
-          ./configure --prefix=/opt/cctools --target=aarch64-apple-darwin || true
-          make -j"$(nproc)" || true
-          sudo make install || true
-          ls -l /opt/cctools/bin || true
-          /opt/cctools/bin/ld64 -v || true
-          /opt/cctools/bin/as -v || true
-
-      - name: 造 macOS 工具 shim 与最小 SDK
-        run: |
-          exec > >(tee -a shims.log) 2>&1
-          set -x
-          mkdir -p /opt/shims /opt/sdk/usr/include /opt/sdk/usr/lib
-          # 假 xcrun: 把 --find xxx 映射到 PATH 里的工具
-          cat > /opt/shims/xcrun <<'EOF'
-          #!/bin/sh
-          # 只用最朴素的方式: 忽略 --sdk/--toolchain, 把最后面的工具名交给 PATH
-          args=""
-          while [ $# -gt 0 ]; do
-            case "$1" in
-              --sdk|--toolchain|-sdk|-toolchain) shift 2 ;;
-              --find) shift; echo "$(command -v "$1")"; exit 0 ;;
-              *) args="$args $1"; shift ;;
-            esac
-          done
-          exec $args
-          EOF
-          chmod +x /opt/shims/xcrun
-          cat > /opt/shims/sw_vers <<'EOF'
-          #!/bin/sh
-          echo "ProductName:  macOS"
-          echo "ProductVersion:  10.15"
-          echo "BuildVersion:  19A583"
-          EOF
-          chmod +x /opt/shims/sw_vers
-          cat > /opt/shims/sysctl <<'EOF'
-          #!/bin/sh
-          case "$*" in
-            *hw.physicalcpu*) echo 8 ;;
-            *hw.logicalcpu*)  echo 8 ;;
-            *hw.memsize*)     echo 8589934592 ;;
-            *) echo 0 ;;
-          esac
-          EOF
-          chmod +x /opt/shims/sysctl
-          # 最小 SDK: 把 clang 自带头文件与系统头文件软链进去
-          CLANG_RES=$(clang -print-resource-dir)
-          ln -sf "$CLANG_RES/include"/* /opt/sdk/usr/include/ 2>/dev/null || true
-          for h in stdio.h stdlib.h string.h unistd.h errno.h time.h; do
-            [ -e "/opt/sdk/usr/include/$h" ] || echo "/* stub */" > "/opt/sdk/usr/include/$h"
-          done
-          ls /opt/sdk/usr/include | head -20
-          /opt/shims/xcrun --find clang
-          /opt/shims/sw_vers
-
-      - name: make -k 强跑 XNU（收集缺失头文件）
-        run: |
-          exec > >(tee -a xnu-build.log) 2>&1
-          set -x
-          export PATH=/opt/shims:/opt/cctools/bin:$PATH
-          export SDKROOT=/opt/sdk
           git clone --depth 1 --branch xnu-8792.81.2 \
-            https://github.com/apple-oss-distributions/xnu.git || true
-          cd xnu || exit 0
-          # -k: 出错继续，尽量多收集错误
-          make -k -j"$(nproc)" ARCH_CONFIGS=ARM64 KERNEL_CONFIGS=RELEASE 2>&1 | head -400 || true
-          echo "=== 缺失头文件统计 ==="
-          grep -o "fatal error: '[^']*' file not found" xnu-build.log 2>/dev/null | sort | uniq -c | sort -rn | head -40 || true
+            https://github.com/apple-oss-distributions/xnu.git
+          cd xnu
+          git log --oneline -1
+          ls
+          echo "=== boot_args 定义 ==="
+          sed -n '/typedef struct boot_args/,/boot_args;/p' pexpert/pexpert/arm64/boot.h
+
+      - name: 构建 XNU（arm64 RELEASE）
+        run: |
+          exec > >(tee -a build.log) 2>&1
+          set -x
+          cd xnu
+          make -j"$(sysctl -n hw.ncpu)" ARCH_CONFIGS=ARM64 KERNEL_CONFIGS=RELEASE || true
+          echo "=== 产出物 ==="
+          find BUILD -maxdepth 4 -type f \( -name "kernel*" -o -name "*.t?" -o -name "mach*" \) 2>/dev/null | head -40
+          ls -lh BUILD/obj/RELEASE_ARM64/ 2>/dev/null || true
+
+      - name: 打包产物
+        if: always()
+        run: |
+          exec > >(tee -a pack.log) 2>&1
+          set -x
+          mkdir -p out
+          if [ -d xnu/BUILD ]; then
+            tar -cjf out/xnu-build-artifacts.tar.bz2 -C xnu BUILD 2>/dev/null || true
+          fi
+          ls -lh out || true
 
       - name: 汇总
         if: always()
         run: |
           exec > >(tee -a summary.txt) 2>&1
           echo "### date: $(date -u)"
-          for f in cctools-build.log shims.log xnu-build.log; do
+          for f in env.log fetch.log build.log pack.log; do
             echo
             echo "########## $f ##########"
             if [ -f "$f" ]; then
@@ -135,10 +84,12 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: xnu-logs-${{ github.run_number }}
+          name: xnu-build-${{ github.run_number }}
           path: |
-            cctools-build.log
-            shims.log
-            xnu-build.log
+            env.log
+            fetch.log
+            build.log
+            pack.log
             summary.txt
+            out/xnu-build-artifacts.tar.bz2
           if-no-files-found: warn
