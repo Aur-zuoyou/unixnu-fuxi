@@ -46,9 +46,11 @@ jobs:
         run: |
           set -euo pipefail
           cd payload
-          aarch64-linux-gnu-gcc -ffreestanding -nostdlib -fpie -pie \
-            -fno-stack-protector -fno-builtin -O2 \
-            -T link.ld -o kernel.elf entry.S kernel.c
+          # 不用 -pie: AArch64 的寻址本身就是 PC 相对的, 静态链接到 0 即可,
+          # 放到任意地址都能跑。(-pie + 自定义脚本会触发 PHDR 覆盖错误)
+          aarch64-linux-gnu-gcc -ffreestanding -nostdlib \
+            -fno-pic -fno-pie -fno-stack-protector -fno-builtin -mcmodel=small -O2 \
+            -Wl,-N -T link.ld -o kernel.elf entry.S kernel.c
           aarch64-linux-gnu-objcopy -O binary kernel.elf kernel.bin
           ls -l kernel.elf kernel.bin
           aarch64-linux-gnu-objdump -h kernel.bin 2>/dev/null | head -5 || true
