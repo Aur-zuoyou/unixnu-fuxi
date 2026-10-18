@@ -100,7 +100,11 @@ jobs:
             echo "改路径: $f"
           done
           mkdir -p /tmp/kernelsupport
-          ar rcs /tmp/kernelsupport/libVMAPPLE.os.RELEASE.a
+          # macOS 的 ar 不接受空库，先编一个空 .o 放进去
+          printf "int fuxi_kernelsupport_stub;\n" > /tmp/kernelsupport/stub.c
+          clang -c /tmp/kernelsupport/stub.c -o /tmp/kernelsupport/stub.o
+          ar rcs /tmp/kernelsupport/libVMAPPLE.os.RELEASE.a /tmp/kernelsupport/stub.o
+          ar t /tmp/kernelsupport/libVMAPPLE.os.RELEASE.a
           ls -l /tmp/kernelsupport/
           grep -rn "kernelsupport" makedefs 2>/dev/null | head -5 || true
           cd ..
