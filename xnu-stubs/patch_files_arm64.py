@@ -54,6 +54,14 @@ def patch(path: Path) -> bool:
         new = re.sub(r"&&\s+", "", new)              # 去掉中间残留的 &&
         new = re.sub(r"[ \t]+", "\t", new).rstrip()  # 规整空白（文件用 TAB 分隔）
 
+        # config 要求 "optional" 后面必须跟条件，否则报
+        #   what is <file> optional on?
+        # 所以把 nos_arm_asm 替换成 arm64，而不是删成空。
+        if re.search(r"\boptional\s*$", new):
+            new = re.sub(r"\boptional\s*$", "optional\tarm64", new)
+        # 行尾残留的 && 也去掉
+        new = re.sub(r"&&\s*$", "", new).rstrip()
+
         if new == line:
             # 兜底：把 optional 之后的条件整段删掉，只保留 arch
             m = re.match(r"^(\s*\S+\s+optional\s+)(arm64)(\s.*)?$", line)
