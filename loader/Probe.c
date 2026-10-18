@@ -170,6 +170,25 @@ Fill (
 
 STATIC
 VOID
+DrawRect (
+  IN UINT32  X,
+  IN UINT32  Y,
+  IN UINT32  W,
+  IN UINT32  H,
+  IN UINT32  Color
+  )
+{
+  UINT32  x;
+  UINT32  y;
+
+  for (y = 0; y < H; y++) {
+    for (x = 0; x < W; x++) {
+      PutPixel (X + x, Y + y, Color);
+    }
+  }
+}
+STATIC
+VOID
 DrawChar (
   IN UINT32  X,
   IN UINT32  Y,
@@ -304,7 +323,15 @@ OnTextOut (
 
   /* ---- 裸机: 只用内存 ---- */
   Fill (0xFF000000);
-  y = 100;
+
+  /* 测试1: 实心矩形 —— 验证坐标与步长 */
+  DrawRect (40, 100, 400, 300, 0xFFFFFFFF);
+
+  /* 测试2: 竖条 —— 验证宽度边界(mFbW 是否算对) */
+  DrawRect (1000, 100, 40, 1500, 0xFFFF0000);
+
+  /* 测试3: 文字 */
+  y = 500;
   DrawString (40, y, "M3", 0xFFFFFFFF);
   y += LINE_H;
   {
