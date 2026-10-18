@@ -114,6 +114,34 @@ Halt (
   }
 }
 
+/** 重新读 GOP 参数。入口那一刻 FrameBufferBase 可能还是 0, 必须晚点再读。 */
+STATIC
+VOID
+RefreshGop (
+  VOID
+  )
+{
+  EFI_STATUS                     Status;
+  EFI_GRAPHICS_OUTPUT_PROTOCOL  *Gop = NULL;
+
+  Status = gBS->LocateProtocol (&gEfiGraphicsOutputProtocolGuid, NULL, (VOID **) &Gop);
+  if (EFI_ERROR (Status) || Gop == NULL || Gop->Mode == NULL) {
+    return;
+  }
+  mFb     = (UINT8 *) (UINTN) Gop->Mode->FrameBufferBase;
+  mFbSize = (UINTN) Gop->Mode->FrameBufferSize;
+  mFbW    = (UINT32) Gop->Mode->Info->HorizontalResolution;
+  mFbH    = (UINT32) Gop->Mode->Info->VerticalResolution;
+  mGopFmt = (UINT32) Gop->Mode->Info->PixelFormat;
+
+  mFbPitch = mFbW;
+  if (mFbH != 0 && (mFbSize % ((UINTN) mFbH * 4)) == 0) {
+    UINTN  derived = mFbSize / ((UINTN) mFbH * 4);
+    if (derived >= mFbW && derived < 16384) {
+      mFbPitch = (UINT32) derived;
+    }
+  }
+}
 STATIC __attribute__((unused))
 UINTN
 GlyphIndex (
@@ -329,10 +357,12 @@ OnTextOut (
     return;
   }
 
+  RefreshGop ();     /* 入口时 FrameBufferBase 可能是 0, 这里重读 */
+
   /* 鍙墦鍗板唴閮ㄥ彉閲? 涓嶇敾浠讳綍涓滆タ 鈥斺€?鎺у埗鍙版枃瀛楁槸鑳界湅鍒扮殑閭ｆ潯閫氶亾 */
   UnicodeSPrint (
     Buf, sizeof (Buf),
-    L"v24 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
+    L"v25 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
     mLocateStatus, (UINT64) mFb, (UINT64) mFbSize,
     mFbW, mFbH, mFbPitch, mGopFmt
     );
