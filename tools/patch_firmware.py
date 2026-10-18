@@ -49,6 +49,10 @@ ALIGN_NEW = """if (((Entry->Start | (Entry->End + 1)) & (RUNTIME_PAGE_ALLOCATION
               (UINT64) Entry->Start, (UINT64) Entry->End, (UINT64) FuxiNewStart, (UINT64) FuxiNewEnd));
             Entry->Start = FuxiNewStart;
             Entry->End   = FuxiNewEnd;
+            if (Entry->Start > Entry->End) {
+              Status = EFI_INVALID_PARAMETER;
+              goto Done;
+            }
           }"""
 
 
