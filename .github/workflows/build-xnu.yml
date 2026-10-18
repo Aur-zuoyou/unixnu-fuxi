@@ -97,13 +97,9 @@ jobs:
           echo "== ASFLAGS 定义在哪里 =="
           grep -rn "ASFLAGS" makedefs/*.def makedefs/*.cmd 2>/dev/null | head -10 || true
           echo "== 在 MakeInc.def 末尾追加 include 路径 =="
-          cat >> makedefs/MakeInc.def <<FUXI_EOF
-
-# fuxi: start.s 会 include <arm64/tunables/tunables.s> 与 "assym.s"
-# 默认 ASFLAGS 没有这些搜索路径，这里补上
-ASFLAGS += -I$(SOURCE_DIR)/osfmk -I$(SOURCE_DIR) -I$(OBJROOT)/EXPORT_HDRS
-
-FUXI_EOF
+          # 用 printf 追加（herdok 结束符不能顶格，会破坏 YAML 块）
+          printf "\n# fuxi: start.s includes <arm64/tunables/tunables.s> and assym.s\n" >> makedefs/MakeInc.def
+          printf "ASFLAGS += -I\$(SOURCE_DIR)/osfmk -I\$(SOURCE_DIR) -I\$(OBJROOT)/EXPORT_HDRS\n" >> makedefs/MakeInc.def
           tail -8 makedefs/MakeInc.def
 
           echo "== 2. 有没有构建 XNU 的脚本 =="
