@@ -362,7 +362,7 @@ OnTextOut (
   /* 鍙墦鍗板唴閮ㄥ彉閲? 涓嶇敾浠讳綍涓滆タ 鈥斺€?鎺у埗鍙版枃瀛楁槸鑳界湅鍒扮殑閭ｆ潯閫氶亾 */
   UnicodeSPrint (
     Buf, sizeof (Buf),
-    L"v25 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
+    L"v26 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
     mLocateStatus, (UINT64) mFb, (UINT64) mFbSize,
     mFbW, mFbH, mFbPitch, mGopFmt
     );
@@ -407,12 +407,14 @@ OnTextOut (
             EFI_MEMORY_DESCRIPTOR  *D = (EFI_MEMORY_DESCRIPTOR *) ((UINT8 *) Map + idx * DescSize);
             if (D->Type >= EfiRuntimeServicesCode && D->Type <= EfiRuntimeServicesData) {
               Rt++;
+              /* 全部打出来: 让我看固件在抱怨哪一条 */
+              UnicodeSPrint (Buf, sizeof (Buf),
+                L"RT t=%Lu s=0x%Lx p=%Lu a=%Lu\r\n",
+                (UINT64) D->Type, (UINT64) D->PhysicalStart,
+                (UINT64) D->NumberOfPages,
+                (UINT64) (D->Attribute & 0xFFFFFFFF));
+              gST->ConOut->OutputString (gST->ConOut, Buf);
               if ((D->PhysicalStart & (EFI_PAGE_SIZE - 1)) != 0) {
-                if (Bad < 4) {
-                  UnicodeSPrint (Buf, sizeof (Buf), L"BAD rt type=%Lu at 0x%Lx pages=%Lu\r\n",
-                    (UINT64) D->Type, (UINT64) D->PhysicalStart, (UINT64) D->NumberOfPages);
-                  gST->ConOut->OutputString (gST->ConOut, Buf);
-                }
                 Bad++;
               }
             }
