@@ -48,15 +48,39 @@ __BEGIN_DECLS
 
 /* ---------------- 空实现（变参，避免参数个数/类型不匹配） ---------------- */
 
+/*
+ * 用 K&R 风格 "()" 声明：参数个数与类型都不做检查。
+ * 这样无论内核代码怎么调用都能编过（只是空实现，firehose 不可用）。
+ * clang 会给 -Wstrict-prototypes 警告，但我们已经去掉了 -Werror。
+ */
+
 static inline firehose_tracepoint_t
-__firehose_buffer_tracepoint_reserve(firehose_buffer_t fb __unused, ...)
+__firehose_buffer_tracepoint_reserve()
 {
 	return (firehose_tracepoint_t)0;
 }
 
 static inline void
-__firehose_buffer_tracepoint_flush(firehose_buffer_t fb __unused, ...)
+__firehose_buffer_tracepoint_flush()
 {
+}
+
+static inline firehose_buffer_t
+__firehose_buffer_create()
+{
+	return (firehose_buffer_t)0;
+}
+
+static inline bool
+__firehose_merge_updates()
+{
+	return false;
+}
+
+static inline bool
+__firehose_kernel_configuration_valid()
+{
+	return true;
 }
 
 __END_DECLS
