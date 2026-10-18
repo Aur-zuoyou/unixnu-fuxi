@@ -307,7 +307,14 @@ OnTextOut (
   y = 100;
   DrawString (40, y, "M3", 0xFFFFFFFF);
   y += LINE_H;
-  DrawString (40, y, "EL1", 0xFFFFFFFF);
+  {
+    CHAR8  ElBuf[4];
+    ElBuf[0] = 'E';
+    ElBuf[1] = 'L';
+    ElBuf[2] = (CHAR8) ('0' + (char) CurrentEl ());
+    ElBuf[3] = 0;
+    DrawString (40, y, ElBuf, 0xFFFFFFFF);
+  }
   y += LINE_H;
   DrawString (40, y, "FDT", 0xFFFFFFFF);
   Hex (mFdtAddr, HexBuf);
