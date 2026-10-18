@@ -364,7 +364,7 @@ OnTextOut (
   /* 鍙墦鍗板唴閮ㄥ彉閲? 涓嶇敾浠讳綍涓滆タ 鈥斺€?鎺у埗鍙版枃瀛楁槸鑳界湅鍒扮殑閭ｆ潯閫氶亾 */
   UnicodeSPrint (
     Buf, sizeof (Buf),
-    L"v28 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
+    L"v29 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
     mLocateStatus, (UINT64) mFb, (UINT64) mFbSize,
     mFbW, mFbH, mFbPitch, mGopFmt
     );
@@ -431,26 +431,56 @@ OnTextOut (
       }
     }
 
-    /* 第二遍: 用入口处预分配好的缓冲, 循环里零分配、零打印, 高频重试。
-       内存图在 DXE 收尾阶段仍在变化, 所以多试几次比"算准 key"更实际。 */
+    /* 只尝试一次。失败就停住并打印内存图, 不做无意义的循环重试。
+       (固件的 DxeCore 在校验它自己的内存图, loader 改不了) */
     St = EFI_ABORTED;
     if (mMapBuf != NULL) {
-      for (idx = 0; idx < 200; idx++) {
-        MapSize = mMapBufSize;
-        St      = gBS->GetMemoryMap (&MapSize, mMapBuf, &MapKey, &DescSize, &DescVer);
-        if (EFI_ERROR (St)) {
-          continue;
-        }
+      MapSize = mMapBufSize;
+      St      = gBS->GetMemoryMap (&MapSize, mMapBuf, &MapKey, &DescSize, &DescVer);
+      if (!EFI_ERROR (St)) {
         St = gBS->ExitBootServices (mImageHandle, MapKey);
-        if (!EFI_ERROR (St)) {
-          break;
-        }
       }
     }
 
     if (EFI_ERROR (St)) {
-      UnicodeSPrint (Buf, sizeof (Buf), L"ExitBootServices -> %r (gave up)\r\n", St);
+      UnicodeSPrint (Buf, sizeof (Buf), L"ExitBootServices -> %r\r\n", St);
       gST->ConOut->OutputString (gST->ConOut, Buf);
+
+      /* 完整内存图: 先按类型计数, 再逐条列出 runtime 属性条目 */
+      if (mMapBuf != NULL) {
+        UINTN  Total = 0;
+        UINTN  RtCnt = 0;
+        UINTN  k;
+        EFI_MEMORY_DESCRIPTOR  *D;
+
+        MapSize = mMapBufSize;
+        if (!EFI_ERROR (gBS->GetMemoryMap (&MapSize, mMapBuf, &MapKey, &DescSize, &DescVer))) {
+          Total = MapSize / DescSize;
+          UnicodeSPrint (Buf, sizeof (Buf), L"total=%Lu descsize=%Lu\r\n",
+                         (UINT64) Total, (UINT64) DescSize);
+          gST->ConOut->OutputString (gST->ConOut, Buf);
+
+          for (k = 0; k < Total; k++) {
+            D = (EFI_MEMORY_DESCRIPTOR *) ((UINT8 *) mMapBuf + k * DescSize);
+            if ((D->Attribute & EFI_MEMORY_RUNTIME) != 0) {
+              RtCnt++;
+            }
+          }
+          UnicodeSPrint (Buf, sizeof (Buf), L"runtime-attr=%Lu\r\n", (UINT64) RtCnt);
+          gST->ConOut->OutputString (gST->ConOut, Buf);
+
+          /* 逐条列出(最后打印, 保持在屏幕上) */
+          for (k = 0; k < Total; k++) {
+            D = (EFI_MEMORY_DESCRIPTOR *) ((UINT8 *) mMapBuf + k * DescSize);
+            if ((D->Attribute & EFI_MEMORY_RUNTIME) != 0) {
+              UnicodeSPrint (Buf, sizeof (Buf), L"k=%Lu t=%Lu s=0x%Lx p=%Lu a=%Lx\r\n",
+                             (UINT64) k, (UINT64) D->Type, (UINT64) D->PhysicalStart,
+                             (UINT64) D->NumberOfPages, (UINT64) D->Attribute);
+              gST->ConOut->OutputString (gST->ConOut, Buf);
+            }
+          }
+        }
+      }
     } else {
       Fill (0xFF0000FF);     /* 退成功: 控制台没了, 用刷屏证明 */
     }

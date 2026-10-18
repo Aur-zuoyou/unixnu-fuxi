@@ -132,6 +132,19 @@ jobs:
           find edk2-msm/Build -iname "*FuxiProbe*" 2>/dev/null | head -10 || true
           ls -l edk2-msm/Build/*/*/AARCH64/ 2>/dev/null | head -10 || true
           echo
+          echo
+          echo "### 源码里出现 EFI_MEMORY_RUNTIME 的文件"
+          grep -rln "EFI_MEMORY_RUNTIME" edk2-msm/Silicon edk2-msm/Platform 2>/dev/null | head -20 || true
+          echo
+          echo "### EFI_MEMORY_RUNTIME 的具体用法(前 40 条)"
+          grep -rn "EFI_MEMORY_RUNTIME" edk2-msm/Silicon edk2-msm/Platform 2>/dev/null | head -40 || true
+          echo
+          echo "### 内存图/属性表相关文件"
+          find edk2-msm/Silicon edk2-msm/Platform -iname "*MemoryMap*" -o -iname "*MemoryAttribute*" -o -iname "*MemMap*" 2>/dev/null | head -20 || true
+          echo
+          echo "### 可疑的非页对齐常量(0x8F0xxxx 之类)"
+          grep -rn "0x8F0\|0x8F09\|0x8F03" edk2-msm/Silicon edk2-msm/Platform 2>/dev/null | head -20 || true
+          echo
           echo "### boot-fuxi.img 里找探针 GUID"
           python3 tools/find_probe.py edk2-msm/boot-fuxi.img || true
           echo
