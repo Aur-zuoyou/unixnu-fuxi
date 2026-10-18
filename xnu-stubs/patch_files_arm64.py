@@ -34,7 +34,7 @@ def patch(path: Path) -> bool:
     changed = False
 
     for i, line in enumerate(lines):
-        if "start.s" not in line or line.lstrip().startswith("#"):
+        if line.lstrip().startswith("#"):
             continue
         # 处理所有带 nos_arm_asm 的行（不只 start.s），
         # 因为该标记会排除整个 arm64 汇编集合
