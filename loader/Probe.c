@@ -1,20 +1,17 @@
 /** @file  Probe.c
 
-  fuxi 探针 v8
+  fuxi 探针 v9
 
-  前面失败的真正原因(v7 之后才想明白):
-    我们的 INF 依赖是 [Depex] TRUE, 于是驱动在 DXE 最早阶段就被加载。
-    那时 gBS->SetTimer 需要的 定时器协议(TimerDxe) 可能还没装好,
-    SetTimer 返回失败 -> 定时器回调永远不触发 -> v5/v6/v7 全部"什么都没发生"。
-    v4 之所以有效, 是因为它在 DriverEntry 里直接死循环, 不依赖任何服务。
+  实测结论:
+    v8 (Depex=GOP): 屏幕变绿 —— 驱动按时加载、GOP 拿到、显存写成功。
+                    但没有文字 —— 那时 GraphicsConsoleDxe 还没把 SimpleTextOut
+                    接到 GOP 上, 所以 ConOut 里没有可用的图形输出设备。
 
-  v8 的做法: 把 INF 的 Depex 改成依赖 GOP。
-    这样一来, 驱动会在"帧缓冲可用"的那一刻才被加载,
-    入口处就能直接刷屏/打印, 不需要定时器、不需要事件。
-
-  判据:
-    屏幕变绿 + 出现 [fuxi-probe v8] -> 成功, 且拿到了 EL
-    仍是普通菜单                     -> GOP 协议从未出现(说明显示不走 GOP)
+  v9 的做法:
+    1. 入口: 拿 GOP, 先把屏幕刷绿(证明链路通)。
+    2. 注册 gEfiSimpleTextOutProtocolGuid 的协议通知:
+       等"文字输出设备"真的出现, 再打印 EL/FDT, 然后停住。
+       不依赖定时器, 也不猜时间点。
 **/
 
 #include <Uefi.h>
@@ -28,6 +25,9 @@
 STATIC EFI_GUID  mFdtTableGuid = {
   0xb1b621d5, 0xf19c, 0x41a5, { 0x83, 0x0b, 0xd9, 0x15, 0x2c, 0x69, 0xaa, 0xe0 }
 };
+
+STATIC UINTN   mFdtAddr;
+STATIC UINT32  mFdtSize;
 
 STATIC
 UINT64
@@ -51,6 +51,60 @@ Halt (
   }
 }
 
+STATIC
+VOID
+PaintGreen (
+  VOID
+  )
+{
+  EFI_STATUS                     Status;
+  EFI_GRAPHICS_OUTPUT_PROTOCOL  *Gop = NULL;
+  UINT32                        *Pix;
+  UINTN                          Count;
+  UINTN                          i;
+
+  Status = gBS->LocateProtocol (&gEfiGraphicsOutputProtocolGuid, NULL, (VOID **) &Gop);
+  if (EFI_ERROR (Status) || Gop == NULL || Gop->Mode == NULL) {
+    return;
+  }
+  if (Gop->Mode->FrameBufferBase == 0) {
+    return;
+  }
+  Pix   = (UINT32 *) (UINTN) Gop->Mode->FrameBufferBase;
+  Count = (UINTN) Gop->Mode->FrameBufferSize / 4;
+  for (i = 0; i < Count; i++) {
+    Pix[i] = 0xFF00FF00;
+  }
+}
+
+STATIC
+VOID
+EFIAPI
+OnTextOut (
+  IN EFI_EVENT  Event,
+  IN VOID      *Context
+  )
+{
+  CHAR16  Buf[192];
+
+  (VOID) Event;
+  (VOID) Context;
+
+  if (gST == NULL || gST->ConOut == NULL) {
+    return;
+  }
+
+  UnicodeSPrint (
+    Buf, sizeof (Buf),
+    L"\r\n[fuxi-probe v9] EL%Lu  FDT=0x%Lx (%Lu bytes)\r\n"
+    L"long-press power 15s to reboot\r\n",
+    CurrentEl (), (UINT64) mFdtAddr, (UINT64) mFdtSize
+    );
+  gST->ConOut->OutputString (gST->ConOut, Buf);
+
+  Halt ();
+}
+
 EFI_STATUS
 EFIAPI
 ProbeEntry (
@@ -58,56 +112,32 @@ ProbeEntry (
   IN EFI_SYSTEM_TABLE  *SystemTable
   )
 {
-  EFI_STATUS                     Status;
-  EFI_GRAPHICS_OUTPUT_PROTOCOL  *Gop = NULL;
-  CHAR16                         Buf[192];
-  UINTN                          FdtAddr = 0;
-  UINT32                         FdtSize = 0;
-  UINTN                          i;
+  EFI_STATUS  Status;
+  EFI_EVENT   Event;
+  UINTN       i;
 
   (VOID) ImageHandle;
   (VOID) SystemTable;
 
-  /* 此时 GOP 一定已经存在(Depex 保证) */
-  Status = gBS->LocateProtocol (&gEfiGraphicsOutputProtocolGuid, NULL, (VOID **) &Gop);
-
-  /* 找 ABL 传进来的设备树 */
+  /* 先把 ABL 传的设备树地址记下来 */
   for (i = 0; i < gST->NumberOfTableEntries; i++) {
     if (CompareGuid (&gST->ConfigurationTable[i].VendorGuid, &mFdtTableGuid)) {
       UINT8  *F = (UINT8 *) gST->ConfigurationTable[i].VendorTable;
-      FdtAddr = (UINTN) F;
+      mFdtAddr = (UINTN) F;
       if (F != NULL) {
-        FdtSize = ((UINT32) F[4] << 24) | ((UINT32) F[5] << 16) |
-                  ((UINT32) F[6] << 8) | (UINT32) F[7];
+        mFdtSize = ((UINT32) F[4] << 24) | ((UINT32) F[5] << 16) |
+                   ((UINT32) F[6] << 8) | (UINT32) F[7];
       }
       break;
     }
   }
 
-  /* 先刷绿: 不依赖控制台 */
-  if (!EFI_ERROR (Status) && Gop != NULL) {
-    if (Gop->Mode != NULL && Gop->Mode->FrameBufferBase != 0) {
-      UINT32  *Pix   = (UINT32 *) (UINTN) Gop->Mode->FrameBufferBase;
-      UINTN    Count = (UINTN) Gop->Mode->FrameBufferSize / 4;
-      for (i = 0; i < Count; i++) {
-        Pix[i] = 0xFF00FF00;
-      }
-    }
-  }
+  PaintGreen ();
 
-  /* 再尝试打印 */
-  if (gST->ConOut != NULL) {
-    UnicodeSPrint (
-      Buf, sizeof (Buf),
-      L"\r\n[fuxi-probe v8] EL%Lu  FDT=0x%Lx (%Lu)  GOP=%s %ux%u\r\n",
-      CurrentEl (), (UINT64) FdtAddr, (UINT64) FdtSize,
-      EFI_ERROR (Status) ? L"no" : L"yes",
-      (UINT32) (Gop && Gop->Mode ? Gop->Mode->Info->HorizontalResolution : 0),
-      (UINT32) (Gop && Gop->Mode ? Gop->Mode->Info->VerticalResolution : 0)
-      );
-    gST->ConOut->OutputString (gST->ConOut, Buf);
+  /* 等"文字输出设备"出现再打印 */
+  Status = gBS->CreateEvent (EVT_NOTIFY_SIGNAL, TPL_CALLBACK, OnTextOut, NULL, &Event);
+  if (EFI_ERROR (Status)) {
+    Halt ();
   }
-
-  Halt ();
-  return EFI_SUCCESS;
+  return gBS->RegisterProtocolNotify (&gEfiSimpleTextOutProtocolGuid, Event, &(VOID *){0});
 }
