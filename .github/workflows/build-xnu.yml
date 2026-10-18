@@ -90,15 +90,20 @@ jobs:
         run: |
           exec > >(tee -a kernlib.log) 2>&1
           set -x
-          sudo mkdir -p /System/Library/KernelSupport
-          sudo ar rcs /System/Library/KernelSupport/libVMAPPLE.os.RELEASE.a
-          ls -l /System/Library/KernelSupport/
-          # 同时试一下 SDK 里的 usr/local/lib/kernel 目录（链接器抱怨找不到）
-          SDK=$(xcrun --sdk macosx --show-sdk-path || true)
-          if [ -n "$SDK" ]; then
-            sudo mkdir -p "$SDK/usr/local/lib/kernel"
-            ls -ld "$SDK/usr/local/lib/kernel" || true
-          fi
+          # /System 是只读卷（SIP），不能在那里建目录。
+          # 改为把构建脚本引用的路径改写到可写位置，并在那里造空库。
+          cd xnu
+          echo "=== 引用 KernelSupport 的文件 ==="
+          grep -rln "KernelSupport" makedefs bsd osfmk libkern iokit pexpert 2>/dev/null | head -10 || true
+          for f in $(grep -rl "KernelSupport" makedefs bsd osfmk libkern iokit pexpert 2>/dev/null); do
+            sed -i "" "s|/System/Library/KernelSupport|/tmp/kernelsupport|g" "$f"
+            echo "改路径: $f"
+          done
+          mkdir -p /tmp/kernelsupport
+          ar rcs /tmp/kernelsupport/libVMAPPLE.os.RELEASE.a
+          ls -l /tmp/kernelsupport/
+          grep -rn "kernelsupport" makedefs 2>/dev/null | head -5 || true
+          cd ..
 
       - name: 构建 XNU（arm64 RELEASE）
         run: |
