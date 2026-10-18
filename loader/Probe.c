@@ -333,7 +333,7 @@ OnTextOut (
 
   UnicodeSPrint (
     Buf, sizeof (Buf),
-    L"[fuxi-probe v19] W=%u H=%u PPSL=%u FMT=%u FBSZ=%Lu\r\n",
+    L"[fuxi-probe v20] W=%u H=%u PPSL=%u FMT=%u FBSZ=%Lu\r\n",
     mFbW, mFbH, mFbPitch,
     (UINT32) (mGopFmt), (UINT64) mFbSize
     );
@@ -353,13 +353,14 @@ OnTextOut (
 
   LeaveBootServices (mImageHandle);
 
-  /* ---- 裸机绘制: 用计算出来的真实 stride ---- */
+  /* ---- 裸机绘制: 不刷屏(保留绿底与已打印文字), 先画一个红色探针块 ---- */
   {
     CHAR8   ElBuf[4];
     CHAR8   Num[20];
     UINT32  yy;
 
-    Fill (0xFF000000);
+    /* 探针块: 只要它出现, 就说明"绘制代码在裸机环境下能跑" */
+    DrawRect (700, 60, 300, 200, 0xFFFF0000);
 
     yy = 150;
     DrawString (40, yy, "M3", 0xFFFFFFFF);
