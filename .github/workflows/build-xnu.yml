@@ -86,6 +86,20 @@ jobs:
           echo "=== 处理后 ==="
           grep -rn -- "-Werror" makedefs 2>/dev/null | head -5 || echo "(已清空)"
 
+      - name: 造一个空的 libVMAPPLE.os.RELEASE.a（Apple 私有内核支持库）
+        run: |
+          exec > >(tee -a kernlib.log) 2>&1
+          set -x
+          sudo mkdir -p /System/Library/KernelSupport
+          sudo ar rcs /System/Library/KernelSupport/libVMAPPLE.os.RELEASE.a
+          ls -l /System/Library/KernelSupport/
+          # 同时试一下 SDK 里的 usr/local/lib/kernel 目录（链接器抱怨找不到）
+          SDK=$(xcrun --sdk macosx --show-sdk-path || true)
+          if [ -n "$SDK" ]; then
+            sudo mkdir -p "$SDK/usr/local/lib/kernel"
+            ls -ld "$SDK/usr/local/lib/kernel" || true
+          fi
+
       - name: 构建 XNU（arm64 RELEASE）
         run: |
           exec > >(tee -a build.log) 2>&1
