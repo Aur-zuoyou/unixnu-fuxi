@@ -89,6 +89,23 @@ jobs:
           echo "== 改后的 start.s 行 =="
           grep -n "arm64/start.s" xnu/osfmk/conf/files.arm64 || echo "(没找到)"
 
+      - name: 给汇编器补 include 路径（start.s 会 include 别的 .s/.h）
+        run: |
+          exec > >(tee -a asflags.log) 2>&1
+          set -x
+          cd xnu
+          echo "== ASFLAGS 定义在哪里 =="
+          grep -rn "ASFLAGS" makedefs/*.def makedefs/*.cmd 2>/dev/null | head -10 || true
+          echo "== 在 MakeInc.def 末尾追加 include 路径 =="
+          cat >> makedefs/MakeInc.def <<FUXI_EOF
+
+# fuxi: start.s 会 include <arm64/tunables/tunables.s> 与 "assym.s"
+# 默认 ASFLAGS 没有这些搜索路径，这里补上
+ASFLAGS += -I$(SOURCE_DIR)/osfmk -I$(SOURCE_DIR) -I$(OBJROOT)/EXPORT_HDRS
+
+FUXI_EOF
+          tail -8 makedefs/MakeInc.def
+
           echo "== 2. 有没有构建 XNU 的脚本 =="
           find xnu-qemu-arm64-tools -name "*.sh" 2>/dev/null | head -20 || true
           echo "== 3. 脚本内容（前 80 行）=="
