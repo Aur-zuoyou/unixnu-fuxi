@@ -96,6 +96,8 @@ jobs:
           done
           echo "### 改之后"
           grep -rn "define RUNTIME_PAGE_ALLOCATION_GRANULARITY" edk2-msm/Common/edk2 2>/dev/null | head -5 || true
+          echo "### 所有引用该宏的位置"
+          grep -rn "RUNTIME_PAGE_ALLOCATION_GRANULARITY" edk2-msm/Common/edk2 2>/dev/null | head -20 || true
       - name: 编 fuxi UEFI
         run: |
           set +e                    # 关键: GitHub 用 bash -e, 否则 build.sh 一失败就吞掉日志
