@@ -41,6 +41,8 @@ STATIC EFI_HANDLE  mImageHandle;
 STATIC EFI_STATUS  mLocateStatus;
 STATIC VOID       *mMapBuf;
 STATIC UINTN       mKernelStack;
+STATIC UINT32      mFdtFound;
+STATIC UINTN       mCfgCount;
 STATIC UINTN       mMapBufSize;
 
 /* ---------------- 8x8 鐐归樀瀛椾綋 ---------------- */
@@ -324,21 +326,35 @@ PayloadEntry (
 
   Fill (0xFF000000);
 
-  yy = 120;
+  yy = 100;
+
+  /* 每个数字单独一行, 避免超出 1080 宽度 */
   DrawString (40, yy, "M4", 0xFFFFFFFF);
   yy += LINE_H;
 
   DrawString (40, yy, "DTB", 0xFFFFFFFF);
+  yy += LINE_H;
   Hex (Dtb, Num);
-  DrawString (40 + 4 * 8 * SCALE, yy, Num, 0xFFFFFFFF);
+  DrawString (40, yy, Num, 0xFFFFFFFF);
   yy += LINE_H;
 
   DrawString (40, yy, "MAGIC", 0xFFFFFFFF);
+  yy += LINE_H;
   Hex ((UINT64) Magic, Num);
-  DrawString (40 + 6 * 8 * SCALE, yy, Num, 0xFFFFFFFF);
+  DrawString (40, yy, Num, 0xFFFFFFFF);
   yy += LINE_H;
 
   DrawString (40, yy, Magic == 0xD00DFEEDUL ? "DT OK" : "DT BAD", 0xFFFFFFFF);
+  yy += LINE_H;
+
+  DrawString (40, yy, mFdtFound ? "FOUND 1" : "FOUND 0", 0xFFFFFFFF);
+  yy += LINE_H;
+
+  DrawString (40, yy, "CFG", 0xFFFFFFFF);
+  yy += LINE_H;
+  Hex ((UINT64) mCfgCount, Num);
+  DrawString (40, yy, Num, 0xFFFFFFFF);
+  yy += LINE_H;
 
   /* 缓存回扫: 把像素挤到显存 */
   {
@@ -440,7 +456,7 @@ OnTextOut (
   /* 鍙墦鍗板唴閮ㄥ彉閲? 涓嶇敾浠讳綍涓滆タ 鈥斺€?鎺у埗鍙版枃瀛楁槸鑳界湅鍒扮殑閭ｆ潯閫氶亾 */
   UnicodeSPrint (
     Buf, sizeof (Buf),
-    L"v34 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
+    L"v35 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
     mLocateStatus, (UINT64) mFb, (UINT64) mFbSize,
     mFbW, mFbH, mFbPitch, mGopFmt
     );
@@ -658,14 +674,23 @@ ProbeEntry (
   (VOID) SystemTable;
   mImageHandle = ImageHandle;
 
+  mCfgCount = gST->NumberOfTableEntries;
+
+  /* 找设备树: 不依赖 GUID —— 直接看哪一块配置表数据的开头是 DTB 魔数。
+     (实测这版固件没有按 b1b621d5-... 发布, 所以按 GUID 找不到) */
   for (i = 0; i < gST->NumberOfTableEntries; i++) {
-    if (CompareGuid (&gST->ConfigurationTable[i].VendorGuid, &mFdtTableGuid)) {
-      UINT8  *F = (UINT8 *) gST->ConfigurationTable[i].VendorTable;
+    UINT8   *F = (UINT8 *) gST->ConfigurationTable[i].VendorTable;
+    UINT32   M = 0;
+    if (F == NULL) {
+      continue;
+    }
+    M = ((UINT32) F[0] << 24) | ((UINT32) F[1] << 16) |
+        ((UINT32) F[2] << 8)  | (UINT32) F[3];
+    if (M == 0xD00DFEEDUL) {
       mFdtAddr = (UINTN) F;
-      if (F != NULL) {
-        mFdtSize = ((UINT32) F[4] << 24) | ((UINT32) F[5] << 16) |
-                   ((UINT32) F[6] << 8) | (UINT32) F[7];
-      }
+      mFdtSize = ((UINT32) F[4] << 24) | ((UINT32) F[5] << 16) |
+                 ((UINT32) F[6] << 8) | (UINT32) F[7];
+      mFdtFound = 1;
       break;
     }
   }
