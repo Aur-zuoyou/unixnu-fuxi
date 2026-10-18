@@ -42,6 +42,14 @@ jobs:
           git clone --depth 1 https://github.com/alephsecurity/xnu-qemu-arm64-tools.git || true
           echo "== 1. 他们的工具仓库结构 =="
           ls -R xnu-qemu-arm64-tools 2>/dev/null | head -60 || true
+      - name: 放开 start.s 的编译条件（消除 __start undefined）
+        run: |
+          exec > >(tee -a startfix.log) 2>&1
+          set -x
+          python3 xnu-stubs/patch_files_arm64.py xnu
+          echo "== 改后的 start.s 行 =="
+          grep -n "arm64/start.s" xnu/osfmk/conf/files.arm64 || echo "(没找到)"
+
           echo "== 2. 有没有构建 XNU 的脚本 =="
           find xnu-qemu-arm64-tools -name "*.sh" 2>/dev/null | head -20 || true
           echo "== 3. 脚本内容（前 80 行）=="
@@ -161,7 +169,14 @@ jobs:
           exec > >(tee -a build.log) 2>&1
           set -x
           cd xnu
-          make -j"$(sysctl -n hw.ncpu)" ARCH_CONFIGS=ARM64 KERNEL_CONFIGS=RELEASE || true
+          # 同时打开 IVMAPPLE 编译标记（双保险：即使 files.arm64 还有条件也能放开）
+          make -j"$(sysctl -n hw.ncpu)" ARCH_CONFIGS=ARM64 KERNEL_CONFIGS=RELEASE IVMAPPLE=1 || true
+          echo "== 验证 start.o =="
+          find BUILD -name "start.o" 2>/dev/null | head -5 || true
+          echo "== LDFILELIST 里的 start =="
+          for f in $(find BUILD -name "LDFILELIST*" 2>/dev/null | head -3); do grep -i "start.o" "$f" | head -3; done || true
+          echo "== 入口符号 =="
+          for b in $(find BUILD -name "kernel.release*" -type f 2>/dev/null | head -2); do echo "--- $b ---"; nm "$b" 2>/dev/null | grep -i "__start" | head -3; done || true
           echo "=== 产出物 ==="
           find BUILD -maxdepth 4 -type f \( -name "kernel*" -o -name "*.t?" -o -name "mach*" \) 2>/dev/null | head -40
           ls -lh BUILD/obj/RELEASE_ARM64/ 2>/dev/null || true
@@ -206,6 +221,7 @@ jobs:
             build.log
             pack.log
             startup.log
+            startfix.log
             aleph.log
             summary.txt
             out/xnu-build-artifacts.tar.bz2
