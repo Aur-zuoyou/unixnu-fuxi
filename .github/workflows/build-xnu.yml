@@ -77,9 +77,9 @@ jobs:
           chmod +x /opt/shims/xcrun
           cat > /opt/shims/sw_vers <<'EOF'
           #!/bin/sh
-          echo "ProductName:	macOS"
-          echo "ProductVersion:	10.15"
-          echo "BuildVersion:	19A583"
+          echo "ProductName:  macOS"
+          echo "ProductVersion:  10.15"
+          echo "BuildVersion:  19A583"
           EOF
           chmod +x /opt/shims/sw_vers
           cat > /opt/shims/sysctl <<'EOF'
