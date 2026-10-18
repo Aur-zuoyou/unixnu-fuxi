@@ -333,7 +333,7 @@ OnTextOut (
 
   UnicodeSPrint (
     Buf, sizeof (Buf),
-    L"[fuxi-probe v14] W=%u H=%u PPSL=%u FMT=%u FBSZ=%Lu\r\n",
+    L"[fuxi-probe v16] W=%u H=%u PPSL=%u FMT=%u FBSZ=%Lu\r\n",
     mFbW, mFbH, mFbPitch,
     (UINT32) (mGopFmt), (UINT64) mFbSize
     );
@@ -353,58 +353,7 @@ OnTextOut (
 
   LeaveBootServices (mImageHandle);
 
-  /* ---- 裸机: 只用内存 ---- */
-  Fill (0xFF000000);
-
-  /* 测试1: 用 5 种"每行像素数"各画一个矩形, 哪个是正的, 哪个就是真值 */
-  {
-    UINT32  cand[5];
-    UINT32  ci;
-    cand[0] = mFbPitch;          /* GOP 报的值 */
-    cand[1] = mFbW;              /* 宽度 */
-    cand[2] = mFbW + 32;         /* 宽度+填充 */
-    cand[3] = mFbW + 64;
-    cand[4] = mFbW * 2;
-
-    for (ci = 0; ci < 5; ci++) {
-      UINT32  save = mFbPitch;
-      mFbPitch = cand[ci];
-      DrawRect (40, 100 + ci * 230, 260, 130, 0xFFFFFFFF);
-      mFbPitch = save;
-    }
-    mFbPitch = cand[0];
-  }
-
-  /* 测试2: 竖条 —— 验证宽度边界(mFbW 是否算对) */
-  DrawRect (1000, 100, 40, 1500, 0xFFFF0000);
-
-  /* 测试4: 参数用色块编码(每块 44x80, 间距 56) */
-  DrawBits (40, 1400, mFbW,     16);   /* 行1: W    */
-  DrawBits (40, 1500, mFbH,     16);   /* 行2: H    */
-  DrawBits (40, 1600, mFbPitch, 16);   /* 行3: PPSL */
-  DrawBits (40, 1700, mGopFmt,   4);   /* 行4: FMT  */
-
-  /* 测试3: 文字 */
-  y = 500;
-  DrawString (40, y, "M3", 0xFFFFFFFF);
-  y += LINE_H;
-  {
-    CHAR8  ElBuf[4];
-    ElBuf[0] = 'E';
-    ElBuf[1] = 'L';
-    ElBuf[2] = (CHAR8) ('0' + (char) CurrentEl ());
-    ElBuf[3] = 0;
-    DrawString (40, y, ElBuf, 0xFFFFFFFF);
-  }
-  y += LINE_H;
-  DrawString (40, y, "FDT", 0xFFFFFFFF);
-  Hex (mFdtAddr, HexBuf);
-  DrawString (40 + 4 * 8 * SCALE, y, HexBuf, 0xFFFFFFFF);
-  y += LINE_H;
-  DrawString (40, y, "SIZE", 0xFFFFFFFF);
-  Hex ((UINT64) mFdtSize, HexBuf);
-  DrawString (40 + 5 * 8 * SCALE, y, HexBuf, 0xFFFFFFFF);
-
+  /* 不擦屏、不画任何东西: 让刚才打印的文字留在屏幕上 */
   Halt ();
 }
 
