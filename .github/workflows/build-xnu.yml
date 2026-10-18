@@ -122,21 +122,19 @@ jobs:
         run: |
           exec > >(tee -a startup.log) 2>&1
           cd xnu
-          echo "########## 1. 谁定义了 __start / _start ##########
-          grep -rn "^__start\|^_start\|^__start:\|^_start:" osfmk libsa pexpert 2>/dev/null | head -20 || true
-          echo
-          echo "########## 2. arm64 汇编文件 ##########
-          ls osfmk/arm64/*.s 2>/dev/null | head -20 || echo "(无)"
-          echo
-          echo "########## 3. 构建目录里的 start 目标文件 ##########
+          echo "== 1. 定义 __start / _start 的位置 =="
+          grep -rn "^__start\|^_start" osfmk libsa pexpert 2>/dev/null | head -20 || true
+          echo "== 2. start.s 开头 =="
+          sed -n "1,45p" osfmk/arm64/start.s 2>/dev/null || echo "(不存在)"
+          echo "== 3. 构建目录里的 start 目标文件 =="
           find BUILD -name "*start*" 2>/dev/null | head -20 || true
-          echo
-          echo "########## 4. LDFILELIST 里有没有 start ##########
-          find BUILD -name "LDFILELIST*" 2>/dev/null | head -5
-          for f in $(find BUILD -name "LDFILELIST*" 2>/dev/null | head -3); do echo "--- $f ---"; grep -i "start" "$f" | head -10; done
-          echo
-          echo "########## 5. start.s 的内容开头 ##########
-          sed -n "1,40p" osfmk/arm64/start.s 2>/dev/null || echo "(不存在)"
+          echo "== 4. LDFILELIST 里的 start =="
+          for f in $(find BUILD -name "LDFILELIST*" 2>/dev/null | head -3); do
+            echo "--- $f ---"
+            grep -i "start" "$f" | head -10
+          done
+          echo "== 5. 链接命令里的入口参数 =="
+          grep -rn "undefined\|__start\| -e " makedefs/MakeInc.def 2>/dev/null | head -10 || true
 
       - name: 构建 XNU（arm64 RELEASE）
         run: |
