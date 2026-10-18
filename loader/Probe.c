@@ -42,6 +42,7 @@ STATIC EFI_STATUS  mLocateStatus;
 STATIC VOID       *mMapBuf;
 STATIC UINTN       mKernelStack;
 STATIC UINTN       mKernelEntry;
+STATIC UINTN       mMemSize;
 STATIC UINT32      mFdtFound;
 STATIC UINTN       mCfgCount;
 STATIC UINTN       mMapBufSize;
@@ -107,6 +108,99 @@ CurrentEl (
   UINT64  Val;
   __asm__ __volatile__ ("mrs %0, CurrentEL" : "=r" (Val));
   return (Val >> 2) & 0x3;
+}
+
+/* ---------------- XNU 交接: boot_args ---------------- */
+
+/*
+ * 结构必须与目标 XNU 版本的 pexpert/arm64/boot.h 完全一致。
+ * 这里按 xnu-8792.81.2 的定义（iOS 16 一代）。
+ * 字段顺序、对齐、填充都由自然对齐产生，不能加 packed。
+ */
+typedef struct {
+  UINT64  v_baseAddr;
+  UINT64  v_display;
+  UINT64  v_rowBytes;
+  UINT64  v_width;
+  UINT64  v_height;
+  UINT64  v_depth;
+} BOOT_VIDEO;
+
+typedef struct {
+  UINT16  Revision;
+  UINT16  Version;
+  UINT64  virtBase;
+  UINT64  physBase;
+  UINT64  memSize;
+  UINT64  topOfKernelData;
+  BOOT_VIDEO  Video;
+  UINT32  machineType;
+  VOID   *deviceTreeP;
+  UINT32  deviceTreeLength;
+  CHAR8   CommandLine[608];
+  UINT64  bootFlags;
+  UINT64  memSizeActual;
+} BOOT_ARGS;
+
+STATIC BOOT_ARGS  gBootArgs;
+
+/** 填好 boot_args。参数都用物理地址（XNU 早期不认虚拟地址）。 */
+STATIC __attribute__((unused)) VOID
+BuildBootArgs (
+  IN UINTN  Dtb,
+  IN UINT32 DtbSize,
+  IN UINTN  MemSize
+  )
+{
+  UINTN  i;
+
+  ZeroMem (&gBootArgs, sizeof (gBootArgs));
+
+  gBootArgs.Revision        = 2;      /* kBootArgsRevision2 */
+  gBootArgs.Version         = 2;      /* kBootArgsVersion2  */
+  gBootArgs.virtBase        = 0;
+  gBootArgs.physBase        = 0x80000000ULL;
+  gBootArgs.memSize         = (UINT64) MemSize;
+  gBootArgs.memSizeActual   = (UINT64) MemSize;
+  gBootArgs.topOfKernelData = 0x80000000ULL + (UINT64) MemSize;
+
+  gBootArgs.Video.v_baseAddr = (UINT64) (UINTN) mFb;
+  gBootArgs.Video.v_display  = 0;
+  gBootArgs.Video.v_rowBytes = (UINT64) mFbPitch * 4;
+  gBootArgs.Video.v_width    = (UINT64) mFbW;
+  gBootArgs.Video.v_height   = (UINT64) mFbH;
+  gBootArgs.Video.v_depth    = 32;
+
+  gBootArgs.machineType    = 0;
+  gBootArgs.deviceTreeP    = (VOID *) Dtb;
+  gBootArgs.deviceTreeLength = DtbSize;
+
+  /* cmdline: 先用 -v (详细模式), 便于看到早期输出 */
+  gBootArgs.CommandLine[0] = '-';
+  gBootArgs.CommandLine[1] = 'v';
+  gBootArgs.CommandLine[2] = 0;
+
+  gBootArgs.bootFlags = 0;
+  (VOID) i;
+}
+
+/** 跳到 XNU 入口: x0 = boot_args 指针, MMU 保持开启（先验证机制） */
+STATIC __attribute__((unused)) VOID
+JumpToBootArgs (
+  IN UINTN  Entry,
+  IN UINTN  BootArgs,
+  IN UINTN  StackTop
+  )
+{
+  __asm__ __volatile__ (
+    "msr  daifset, #0xf\n"
+    "mov  sp, %2\n"
+    "mov  x0, %1\n"
+    "br   %0\n"
+    :
+    : "r" (Entry), "r" (BootArgs), "r" (StackTop)
+    : "memory"
+    );
 }
 
 STATIC __attribute__((unused))
@@ -528,7 +622,7 @@ OnTextOut (
   /* 鍙墦鍗板唴閮ㄥ彉閲? 涓嶇敾浠讳綍涓滆タ 鈥斺€?鎺у埗鍙版枃瀛楁槸鑳界湅鍒扮殑閭ｆ潯閫氶亾 */
   UnicodeSPrint (
     Buf, sizeof (Buf),
-    L"v38 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
+    L"v39 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
     mLocateStatus, (UINT64) mFb, (UINT64) mFbSize,
     mFbW, mFbH, mFbPitch, mGopFmt
     );
@@ -591,6 +685,9 @@ OnTextOut (
           for (idx = 0; idx < Count; idx++) {
             EFI_MEMORY_DESCRIPTOR  *D = (EFI_MEMORY_DESCRIPTOR *) ((UINT8 *) Map + idx * DescSize);
             /* 关键: 固件看的是 Attribute 里的 EFI_MEMORY_RUNTIME 位, 不是类型 */
+            if (D->Type == EfiConventionalMemory) {
+              mMemSize += (UINTN) D->NumberOfPages * EFI_PAGE_SIZE;
+            }
             if ((D->Attribute & EFI_MEMORY_RUNTIME) != 0) {
               Rt++;
               /* 全部打出来: 让我看固件在抱怨哪一条 */
@@ -675,11 +772,10 @@ OnTextOut (
         }
       }
     } else {
-      /* 退出成功: 跳到独立编译的内核 (M5) */
+      /* 退出成功: 构造 boot_args, 按 XNU 的约定传 x0=&boot_args (M6 自测) */
       if (mKernelStack != 0 && mKernelEntry != 0) {
-        JumpToKernel (mKernelEntry, mFdtAddr,
-                      (UINTN) mFb, (UINTN) mFbPitch, (UINTN) mFbH,
-                      mKernelStack);
+        BuildBootArgs (mFdtAddr, mFdtSize, mMemSize);
+        JumpToBootArgs (mKernelEntry, (UINTN) &gBootArgs, mKernelStack);
       }
     }
 
