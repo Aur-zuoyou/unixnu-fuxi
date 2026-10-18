@@ -335,7 +335,7 @@ OnTextOut (
   /* 只打印内部变量, 不画任何东西 —— 控制台文字是能看到的那条通道 */
   UnicodeSPrint (
     Buf, sizeof (Buf),
-    L"v22 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
+    L"v23 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
     mLocateStatus, (UINT64) mFb, (UINT64) mFbSize,
     mFbW, mFbH, mFbPitch, mGopFmt
     );
@@ -349,35 +349,60 @@ OnTextOut (
     }
   }
 
-  LeaveBootServices (mImageHandle);
+  /* ---- 内存图审计: 找出未对齐的 runtime 条目 ---- */
+  {
+    EFI_STATUS              St;
+    UINTN                   MapSize = 0;
+    UINTN                   MapKey = 0;
+    UINTN                   DescSize = 0;
+    UINT32                  DescVer = 0;
+    EFI_MEMORY_DESCRIPTOR  *Map = NULL;
+    UINTN                   Count;
+    UINTN                   Bad = 0;
+    UINTN                   Rt = 0;
+    UINTN                   idx;
 
-  /* 只有拿到帧缓冲才画; 画之前不刷屏, 每一步都留在屏幕上 */
-  if (mFb != NULL) {
-    CHAR8   Num[20];
-    CHAR8   ElBuf[4];
-    UINT32  yy;
+    St = gBS->GetMemoryMap (&MapSize, NULL, &MapKey, &DescSize, &DescVer);
+    if (St == EFI_BUFFER_TOO_SMALL) {
+      MapSize += 4 * DescSize;
+      Map = (EFI_MEMORY_DESCRIPTOR *) AllocatePool (MapSize);
+      if (Map != NULL) {
+        St = gBS->GetMemoryMap (&MapSize, Map, &MapKey, &DescSize, &DescVer);
+      }
+    }
 
-    DrawRect (700, 60, 300, 200, 0xFFFF0000);      /* 探针块 */
+    if (Map != NULL && !EFI_ERROR (St)) {
+      Count = MapSize / DescSize;
+      for (idx = 0; idx < Count; idx++) {
+        EFI_MEMORY_DESCRIPTOR  *D = (EFI_MEMORY_DESCRIPTOR *) ((UINT8 *) Map + idx * DescSize);
+        if (D->Type >= EfiRuntimeServicesCode && D->Type <= EfiRuntimeServicesData) {
+          Rt++;
+          if ((D->PhysicalStart & (EFI_PAGE_SIZE - 1)) != 0) {
+            if (Bad < 4) {
+              UnicodeSPrint (Buf, sizeof (Buf),
+                L"BAD rt type=%Lu at 0x%Lx pages=%Lu\r\n",
+                (UINT64) D->Type, (UINT64) D->PhysicalStart, (UINT64) D->NumberOfPages);
+              gST->ConOut->OutputString (gST->ConOut, Buf);
+            }
+            Bad++;
+          }
+        }
+      }
+      UnicodeSPrint (Buf, sizeof (Buf),
+        L"map: desc=%Lu rt=%Lu bad=%Lu descsize=%Lu\r\n",
+        (UINT64) Count, (UINT64) Rt, (UINT64) Bad, (UINT64) DescSize);
+      gST->ConOut->OutputString (gST->ConOut, Buf);
 
-    yy = 120;
-    DrawString (40, yy, "M3", 0xFFFFFFFF);
-    yy += LINE_H;
-
-    ElBuf[0] = 'E';
-    ElBuf[1] = 'L';
-    ElBuf[2] = (CHAR8) ('0' + (char) CurrentEl ());
-    ElBuf[3] = 0;
-    DrawString (40, yy, ElBuf, 0xFFFFFFFF);
-    yy += LINE_H;
-
-    DrawString (40, yy, "PITCH", 0xFFFFFFFF);
-    Hex ((UINT64) mFbPitch, Num);
-    DrawString (40 + 6 * 8 * SCALE, yy, Num, 0xFFFFFFFF);
-    yy += LINE_H;
-
-    DrawString (40, yy, "FB", 0xFFFFFFFF);
-    Hex ((UINT64) (UINTN) mFb, Num);
-    DrawString (40 + 3 * 8 * SCALE, yy, Num, 0xFFFFFFFF);
+      /* 真正退出, 并把返回值打出来 */
+      St = gBS->ExitBootServices (mImageHandle, MapKey);
+      UnicodeSPrint (Buf, sizeof (Buf), L"ExitBootServices -> %r\r\n", St);
+      if (gST->ConOut != NULL) {
+        gST->ConOut->OutputString (gST->ConOut, Buf);
+      }
+    } else {
+      UnicodeSPrint (Buf, sizeof (Buf), L"map failed: %r\r\n", St);
+      gST->ConOut->OutputString (gST->ConOut, Buf);
+    }
   }
 
   Halt ();
