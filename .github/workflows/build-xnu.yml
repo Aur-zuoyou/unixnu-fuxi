@@ -117,6 +117,27 @@ jobs:
           grep -rn "kernelsupport" makedefs 2>/dev/null | head -5 || true
           cd ..
 
+      - name: 诊断 __start 入口符号
+        if: always()
+        run: |
+          exec > >(tee -a startup.log) 2>&1
+          cd xnu
+          echo "########## 1. 谁定义了 __start / _start ##########
+          grep -rn "^__start\|^_start\|^__start:\|^_start:" osfmk libsa pexpert 2>/dev/null | head -20 || true
+          echo
+          echo "########## 2. arm64 汇编文件 ##########
+          ls osfmk/arm64/*.s 2>/dev/null | head -20 || echo "(无)"
+          echo
+          echo "########## 3. 构建目录里的 start 目标文件 ##########
+          find BUILD -name "*start*" 2>/dev/null | head -20 || true
+          echo
+          echo "########## 4. LDFILELIST 里有没有 start ##########
+          find BUILD -name "LDFILELIST*" 2>/dev/null | head -5
+          for f in $(find BUILD -name "LDFILELIST*" 2>/dev/null | head -3); do echo "--- $f ---"; grep -i "start" "$f" | head -10; done
+          echo
+          echo "########## 5. start.s 的内容开头 ##########
+          sed -n "1,40p" osfmk/arm64/start.s 2>/dev/null || echo "(不存在)"
+
       - name: 构建 XNU（arm64 RELEASE）
         run: |
           exec > >(tee -a build.log) 2>&1
@@ -166,6 +187,7 @@ jobs:
             werror.log
             build.log
             pack.log
+            startup.log
             summary.txt
             out/xnu-build-artifacts.tar.bz2
           if-no-files-found: warn
