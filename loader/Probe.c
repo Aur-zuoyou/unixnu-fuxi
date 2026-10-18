@@ -1,15 +1,12 @@
 /** @file  Probe.c
 
-  fuxi 探针 v11 —— M3: 裸机 payload 自己画字
+  fuxi 鎺㈤拡 v11 鈥斺€?M3: 瑁告満 payload 鑷繁鐢诲瓧
 
-  已知:
-    M1: EL1 / GOP 可用 / 能打印
-    M2: ExitBootServices 之后仍能运行(整屏刷蓝)
+  宸茬煡:
+    M1: EL1 / GOP 鍙敤 / 鑳芥墦鍗?    M2: ExitBootServices 涔嬪悗浠嶈兘杩愯(鏁村睆鍒疯摑)
 
-  问题: 退出 Boot Services 后没有控制台, 想输出只能自己往显存画像素。
-  v11 就做这件事: 内置 8x8 点阵字体, 放大 6 倍画到帧缓冲。
-
-  预期屏幕: 蓝底 + 白色文字
+  闂: 閫€鍑?Boot Services 鍚庢病鏈夋帶鍒跺彴, 鎯宠緭鍑哄彧鑳借嚜宸卞線鏄惧瓨鐢诲儚绱犮€?  v11 灏卞仛杩欎欢浜? 鍐呯疆 8x8 鐐归樀瀛椾綋, 鏀惧ぇ 6 鍊嶇敾鍒板抚缂撳啿銆?
+  棰勬湡灞忓箷: 钃濆簳 + 鐧借壊鏂囧瓧
       M3
       EL1
       FDT=0X........
@@ -43,7 +40,7 @@ STATIC UINT32      mFbH;
 STATIC EFI_HANDLE  mImageHandle;
 STATIC EFI_STATUS  mLocateStatus;
 
-/* ---------------- 8x8 点阵字体 ---------------- */
+/* ---------------- 8x8 鐐归樀瀛椾綋 ---------------- */
 
 STATIC CONST CHAR8  CHARSET[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ :-=.()x/";
 
@@ -190,7 +187,7 @@ DrawRect (
     }
   }
 }
-/** 把 16 位数值画成一排色块: 亮=1 暗=0。即使字体坏了也能读数字。 */
+/** 鎶?16 浣嶆暟鍊肩敾鎴愪竴鎺掕壊鍧? 浜?1 鏆?0銆傚嵆浣垮瓧浣撳潖浜嗕篃鑳借鏁板瓧銆?*/
 STATIC __attribute__((unused))
 VOID
 DrawBits (
@@ -332,10 +329,10 @@ OnTextOut (
     return;
   }
 
-  /* 只打印内部变量, 不画任何东西 —— 控制台文字是能看到的那条通道 */
+  /* 鍙墦鍗板唴閮ㄥ彉閲? 涓嶇敾浠讳綍涓滆タ 鈥斺€?鎺у埗鍙版枃瀛楁槸鑳界湅鍒扮殑閭ｆ潯閫氶亾 */
   UnicodeSPrint (
     Buf, sizeof (Buf),
-    L"v23 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
+    L"v24 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
     mLocateStatus, (UINT64) mFb, (UINT64) mFbSize,
     mFbW, mFbH, mFbPitch, mGopFmt
     );
@@ -349,7 +346,12 @@ OnTextOut (
     }
   }
 
-  /* ---- 内存图审计: 找出未对齐的 runtime 条目 ---- */
+  /* ---- 鍐呭瓨鍥惧璁? 鎵惧嚭鏈榻愮殑 runtime 鏉＄洰 ---- */
+  {
+    EFI_STATUS              St;
+  /* ---- 内存图审计 + 正确顺序的 ExitBootServices ----
+     规则: GetMemoryMap 之后到 ExitBootServices 之间不能有任何内存分配;
+     控制台打印也会分配内存, 所以打印必须全部放在取图之前。            */
   {
     EFI_STATUS              St;
     UINTN                   MapSize = 0;
@@ -357,55 +359,80 @@ OnTextOut (
     UINTN                   DescSize = 0;
     UINT32                  DescVer = 0;
     EFI_MEMORY_DESCRIPTOR  *Map = NULL;
-    UINTN                   Count;
-    UINTN                   Bad = 0;
+    UINTN                   Count = 0;
     UINTN                   Rt = 0;
+    UINTN                   Bad = 0;
     UINTN                   idx;
 
+    /* 第一遍: 只统计并打印 */
     St = gBS->GetMemoryMap (&MapSize, NULL, &MapKey, &DescSize, &DescVer);
     if (St == EFI_BUFFER_TOO_SMALL) {
-      MapSize += 4 * DescSize;
+      MapSize += 8 * DescSize;
       Map = (EFI_MEMORY_DESCRIPTOR *) AllocatePool (MapSize);
       if (Map != NULL) {
         St = gBS->GetMemoryMap (&MapSize, Map, &MapKey, &DescSize, &DescVer);
+        if (!EFI_ERROR (St)) {
+          Count = MapSize / DescSize;
+          for (idx = 0; idx < Count; idx++) {
+            EFI_MEMORY_DESCRIPTOR  *D = (EFI_MEMORY_DESCRIPTOR *) ((UINT8 *) Map + idx * DescSize);
+            if (D->Type >= EfiRuntimeServicesCode && D->Type <= EfiRuntimeServicesData) {
+              Rt++;
+              if ((D->PhysicalStart & (EFI_PAGE_SIZE - 1)) != 0) {
+                if (Bad < 4) {
+                  UnicodeSPrint (Buf, sizeof (Buf), L"BAD rt type=%Lu at 0x%Lx pages=%Lu\r\n",
+                    (UINT64) D->Type, (UINT64) D->PhysicalStart, (UINT64) D->NumberOfPages);
+                  gST->ConOut->OutputString (gST->ConOut, Buf);
+                }
+                Bad++;
+              }
+            }
+          }
+          UnicodeSPrint (Buf, sizeof (Buf), L"map: desc=%Lu rt=%Lu bad=%Lu descsize=%Lu\r\n",
+            (UINT64) Count, (UINT64) Rt, (UINT64) Bad, (UINT64) DescSize);
+          gST->ConOut->OutputString (gST->ConOut, Buf);
+        }
+        FreePool (Map);
+        Map = NULL;
       }
     }
 
-    if (Map != NULL && !EFI_ERROR (St)) {
-      Count = MapSize / DescSize;
-      for (idx = 0; idx < Count; idx++) {
-        EFI_MEMORY_DESCRIPTOR  *D = (EFI_MEMORY_DESCRIPTOR *) ((UINT8 *) Map + idx * DescSize);
-        if (D->Type >= EfiRuntimeServicesCode && D->Type <= EfiRuntimeServicesData) {
-          Rt++;
-          if ((D->PhysicalStart & (EFI_PAGE_SIZE - 1)) != 0) {
-            if (Bad < 4) {
-              UnicodeSPrint (Buf, sizeof (Buf),
-                L"BAD rt type=%Lu at 0x%Lx pages=%Lu\r\n",
-                (UINT64) D->Type, (UINT64) D->PhysicalStart, (UINT64) D->NumberOfPages);
-              gST->ConOut->OutputString (gST->ConOut, Buf);
-            }
-            Bad++;
-          }
-        }
+    /* 第二遍: 取图后立刻退出, 中间不打印、不分配 */
+    St = EFI_ABORTED;
+    for (idx = 0; idx < 6; idx++) {
+      MapSize = 0;
+      St      = gBS->GetMemoryMap (&MapSize, NULL, &MapKey, &DescSize, &DescVer);
+      if (St != EFI_BUFFER_TOO_SMALL) {
+        break;
       }
-      UnicodeSPrint (Buf, sizeof (Buf),
-        L"map: desc=%Lu rt=%Lu bad=%Lu descsize=%Lu\r\n",
-        (UINT64) Count, (UINT64) Rt, (UINT64) Bad, (UINT64) DescSize);
-      gST->ConOut->OutputString (gST->ConOut, Buf);
-
-      /* 真正退出, 并把返回值打出来 */
+      MapSize += 8 * DescSize;
+      Map      = (EFI_MEMORY_DESCRIPTOR *) AllocatePool (MapSize);
+      if (Map == NULL) {
+        break;
+      }
+      St = gBS->GetMemoryMap (&MapSize, Map, &MapKey, &DescSize, &DescVer);
+      if (EFI_ERROR (St)) {
+        FreePool (Map);
+        Map = NULL;
+        continue;
+      }
       St = gBS->ExitBootServices (mImageHandle, MapKey);
-      UnicodeSPrint (Buf, sizeof (Buf), L"ExitBootServices -> %r\r\n", St);
-      if (gST->ConOut != NULL) {
-        gST->ConOut->OutputString (gST->ConOut, Buf);
+      if (!EFI_ERROR (St)) {
+        break;
       }
-    } else {
-      UnicodeSPrint (Buf, sizeof (Buf), L"map failed: %r\r\n", St);
+      FreePool (Map);
+      Map = NULL;
+    }
+
+    if (EFI_ERROR (St)) {
+      UnicodeSPrint (Buf, sizeof (Buf), L"ExitBootServices -> %r (gave up)\r\n", St);
       gST->ConOut->OutputString (gST->ConOut, Buf);
+    } else {
+      Fill (0xFF0000FF);     /* 退成功: 控制台没了, 用刷屏证明 */
     }
   }
 
   Halt ();
+}
 }
 EFI_STATUS
 EFIAPI
@@ -442,8 +469,7 @@ ProbeEntry (
     mFbW     = (UINT32) Gop->Mode->Info->HorizontalResolution;
     mFbH     = (UINT32) Gop->Mode->Info->VerticalResolution;
     mGopFmt  = (UINT32) Gop->Mode->Info->PixelFormat;
-    /* GOP 报的 PixelsPerScanLine 不可信(实测 1000 < 宽度 1080)。
-       用帧缓冲总字节数反推真实 stride: FBSZ / 4 / H */
+    /* GOP 鎶ョ殑 PixelsPerScanLine 涓嶅彲淇?瀹炴祴 1000 < 瀹藉害 1080)銆?       鐢ㄥ抚缂撳啿鎬诲瓧鑺傛暟鍙嶆帹鐪熷疄 stride: FBSZ / 4 / H */
     mFbPitch = mFbW;
     if (mFbH != 0 && (mFbSize % ((UINTN) mFbH * 4)) == 0) {
       UINTN  derived = mFbSize / ((UINTN) mFbH * 4);
