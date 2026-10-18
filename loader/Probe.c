@@ -440,7 +440,7 @@ OnTextOut (
   /* 鍙墦鍗板唴閮ㄥ彉閲? 涓嶇敾浠讳綍涓滆タ 鈥斺€?鎺у埗鍙版枃瀛楁槸鑳界湅鍒扮殑閭ｆ潯閫氶亾 */
   UnicodeSPrint (
     Buf, sizeof (Buf),
-    L"v33 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
+    L"v34 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
     mLocateStatus, (UINT64) mFb, (UINT64) mFbSize,
     mFbW, mFbH, mFbPitch, mGopFmt
     );
@@ -457,6 +457,25 @@ OnTextOut (
   /* ---- 鍐呭瓨鍥惧璁? 鎵惧嚭鏈榻愮殑 runtime 鏉＄洰 ---- */
   {
     EFI_STATUS              St;
+  /* ---- 枚举 EFI 配置表: 设备树到底挂在哪个 GUID 下 ---- */
+  {
+    UINTN  ci;
+    UINTN  shown = 0;
+
+    UnicodeSPrint (Buf, sizeof (Buf), L"cfg count=%Lu\r\n",
+                   (UINT64) gST->NumberOfTableEntries);
+    gST->ConOut->OutputString (gST->ConOut, Buf);
+
+    for (ci = 0; ci < gST->NumberOfTableEntries && shown < 12; ci++) {
+      UnicodeSPrint (Buf, sizeof (Buf), L"[%Lu] %g ptr=0x%Lx\r\n",
+                     (UINT64) ci,
+                     &gST->ConfigurationTable[ci].VendorGuid,
+                     (UINT64) (UINTN) gST->ConfigurationTable[ci].VendorTable);
+      gST->ConOut->OutputString (gST->ConOut, Buf);
+      shown++;
+    }
+  }
+
   /* ---- 内存图审计 + 正确顺序的 ExitBootServices ----
      规则: GetMemoryMap 之后到 ExitBootServices 之间不能有任何内存分配;
      控制台打印也会分配内存, 所以打印必须全部放在取图之前。            */
