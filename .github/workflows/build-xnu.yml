@@ -1,0 +1,109 @@
+name: build-xnu
+
+# 目标: 在 Linux CI 上交叉编译开源 XNU（arm64），拿到可跳转的二进制。
+#
+# 现状: 这一步是"门槛关口"，大概率要反复调整。所以本工作流**故意不硬失败**，
+#       每一步都捕获日志并上传，方便按错误逐条推进。
+#
+# 参考路径: alephsecurity/xnu-qemu-arm64 用 cctools(ld64/as) + 精简 SDK
+#          编译 xnu-4903；我们这里先对 xnu-8792 做可行性探测。
+
+on:
+  push:
+    paths:
+      - ".github/workflows/build-xnu.yml"
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build clang lld llvm \
+            python3 python3-distutils git curl ca-certificates \
+            libssl-dev uuid-dev bison flex libxml2-dev zlib1g-dev
+
+      - name: 取 XNU 源码
+        run: |
+          set +e
+          {
+            echo "=== clone xnu-8792.81.2 ==="
+            git clone --depth 1 --branch xnu-8792.81.2 \
+              https://github.com/apple-oss-distributions/xnu.git 2>&1
+            echo "=== 目录 ==="
+            ls xnu | head -40
+            echo "=== BUILD 相关文件 ==="
+            ls xnu/BUILD 2>/dev/null | head -20
+            find xnu -maxdepth 2 -iname "*.md" 2>/dev/null | head -10
+            echo "=== boot.h 是否存在（boot_args 定义） ==="
+            ls -l xnu/pexpert/pexpert/arm64/boot.h 2>/dev/null
+            sed -n '40,110p' xnu/pexpert/pexpert/arm64/boot.h 2>/dev/null
+          } 2>&1 | tee xnu-fetch.log
+
+      - name: 取 cctools-port（Linux 上的 ld64/as）
+        run: |
+          set +e
+          {
+            echo "=== clone cctools-port ==="
+            git clone --depth 1 https://github.com/tpoechtrager/cctools-port.git 2>&1
+            ls cctools-port
+            ls cctools-port/cctools 2>/dev/null | head -20
+          } 2>&1 | tee cctools-fetch.log
+
+      - name: 尝试构建 cctools
+        run: |
+          set +e
+          {
+            echo "=== configure ==="
+            cd cctools-port/cctools || exit 0
+            ./configure --prefix=/opt/cctools --target=aarch64-apple-darwin 2>&1 | tail -40
+            echo "=== make ==="
+            make -j"$(nproc)" 2>&1 | tail -60
+            echo "=== install ==="
+            sudo make install 2>&1 | tail -20
+            ls -l /opt/cctools/bin 2>/dev/null
+          } 2>&1 | tee ../../cctools-build.log
+
+      - name: 尝试构建 XNU（arm64）
+        run: |
+          set +e
+          {
+            export PATH=/opt/cctools/bin:$PATH
+            cd xnu || exit 0
+            echo "=== 可用工具 ==="
+            which ld64 as clang 2>&1
+            echo "=== 试跑 make ==="
+            make -j"$(nproc)" ARCH_CONFIGS=ARM64 KERNEL_CONFIGS=RELEASE SDKROOT=/opt/sdk 2>&1 | tail -120
+          } 2>&1 | tee ../xnu-build.log
+
+      - name: 汇总
+        if: always()
+        run: |
+          set +e
+          {
+            echo "### date: $(date -u)"
+            for f in xnu-fetch.log cctools-fetch.log cctools-build.log xnu-build.log; do
+              echo
+              echo "########## $f ##########"
+              if [ -f "$f" ]; then tail -100 "$f"; else echo "(没有该文件)"; fi
+            done
+          } > summary.txt
+          cat summary.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: xnu-logs-${{ github.run_number }}
+          path: |
+            xnu-fetch.log
+            cctools-fetch.log
+            cctools-build.log
+            xnu-build.log
+            summary.txt
+          if-no-files-found: warn
