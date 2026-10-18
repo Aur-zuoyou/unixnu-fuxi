@@ -189,6 +189,23 @@ DrawRect (
     }
   }
 }
+/** 把 16 位数值画成一排色块: 亮=1 暗=0。即使字体坏了也能读数字。 */
+STATIC
+VOID
+DrawBits (
+  IN UINT32  X,
+  IN UINT32  Y,
+  IN UINT32  Value,
+  IN UINT32  Bits
+  )
+{
+  UINT32  i;
+
+  for (i = 0; i < Bits; i++) {
+    UINT32  On = (Value >> (Bits - 1 - i)) & 1;
+    DrawRect (X + i * 56, Y, 44, 80, On ? 0xFFFFFFFF : 0xFF202020);
+  }
+}
 STATIC
 VOID
 DrawChar (
@@ -316,11 +333,19 @@ OnTextOut (
 
   UnicodeSPrint (
     Buf, sizeof (Buf),
-    L"[fuxi-probe v13] W=%u H=%u PPSL=%u FMT=%u FBSZ=%Lu\r\n",
+    L"[fuxi-probe v14] W=%u H=%u PPSL=%u FMT=%u FBSZ=%Lu\r\n",
     mFbW, mFbH, mFbPitch,
     (UINT32) (mGopFmt), (UINT64) mFbSize
     );
-  gST->ConOut->OutputString (gST->ConOut, Buf);
+  for (j = 0; j < 120; j++) {
+    gST->ConOut->OutputString (gST->ConOut, Buf);
+    {
+      UINTN  k;
+      for (k = 0; k < 3000000UL; k++) {
+        __asm__ __volatile__ ("");
+      }
+    }
+  }
 
   for (j = 0; j < 100000000UL; j++) {
     __asm__ __volatile__ ("");
@@ -336,6 +361,12 @@ OnTextOut (
 
   /* 测试2: 竖条 —— 验证宽度边界(mFbW 是否算对) */
   DrawRect (1000, 100, 40, 1500, 0xFFFF0000);
+
+  /* 测试4: 参数用色块编码(每块 44x80, 间距 56) */
+  DrawBits (40, 1400, mFbW,     16);   /* 行1: W    */
+  DrawBits (40, 1500, mFbH,     16);   /* 行2: H    */
+  DrawBits (40, 1600, mFbPitch, 16);   /* 行3: PPSL */
+  DrawBits (40, 1700, mGopFmt,   4);   /* 行4: FMT  */
 
   /* 测试3: 文字 */
   y = 500;

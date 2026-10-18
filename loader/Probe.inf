@@ -1,5 +1,5 @@
 ## @file
-#  fuxi 鎺㈤拡 v11 (M3: 瑁告満 payload 鑷粯鐐归樀瀛椾綋)
+#  fuxi 閹恒垽鎷?v11 (M3: 鐟佸憡婧€ payload 閼奉亞绮悙褰掓█鐎涙ぞ缍?
 ##
 
 [Defines]
@@ -7,7 +7,7 @@
   BASE_NAME                      = FuxiProbe
   FILE_GUID                      = 9c4e2a71-3d85-4f0b-8a6e-1b7d5c2e9f34
   MODULE_TYPE                    = DXE_DRIVER
-  VERSION_STRING                 = 0.12
+  VERSION_STRING                 = 0.14
   ENTRY_POINT                    = ProbeEntry
 
 [Sources]
