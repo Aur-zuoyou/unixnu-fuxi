@@ -98,8 +98,14 @@ jobs:
           grep -rn "ASFLAGS" makedefs/*.def makedefs/*.cmd 2>/dev/null | head -10 || true
           echo "== 在 MakeInc.def 末尾追加 include 路径 =="
           # 用 printf 追加（herdok 结束符不能顶格，会破坏 YAML 块）
-          printf "\n# fuxi: start.s includes <arm64/tunables/tunables.s> and assym.s\n" >> makedefs/MakeInc.def
-          printf "ASFLAGS += -I\$(SOURCE_DIR)/osfmk -I\$(SOURCE_DIR) -I\$(OBJROOT)/EXPORT_HDRS\n" >> makedefs/MakeInc.def
+          # SOURCE_DIR 在 osfmk 目录下可能已指向 osfmk 本身，所以两个都加
+          INCS="-I\$(SOURCE_DIR) -I\$(SOURCE_DIR)/osfmk -I\$(SOURCE_DIR)/arm64 -I\$(OBJROOT) -I\$(OBJROOT)/EXPORT_HDRS"
+          for f in makedefs/MakeInc.def makedefs/MakeInc.cmd; do
+            if [ -f "$f" ]; then
+              printf "\n# fuxi: start.s includes <arm64/tunables/tunables.s>\nASFLAGS += %s\n" "$INCS" >> "$f"
+              echo "追加到 $f: $(tail -2 "$f" | tr "\n" " ")"
+            fi
+          done
           tail -8 makedefs/MakeInc.def
 
           echo "== 2. 有没有构建 XNU 的脚本 =="
@@ -238,6 +244,7 @@ jobs:
             build.log
             pack.log
             startup.log
+            asflags.log
             startfix.log
             aleph.log
             summary.txt
