@@ -3,17 +3,19 @@
 
 问题链:
   链接报 `entry point (__start) undefined`
-  → start.s 没被汇编
+  → start.s 没被汇编 → 没有 start.o
   → osfmk/conf/files.arm64 里这一行是:
-        osfmk/arm64/start.s   optional   nos_arm_asm
-    `nos_arm_asm`（"不要 ARM 汇编"）在 VMAPPLE 构建下被打开，于是被排除
+        osfmk/arm64/start.s   optional  nos_arm_asm
+    `nos_arm_asm` 这个 tag 在当前构建里不成立，于是文件被排除
 
-处理:
-  把 nos_arm_asm 换成 arm64（config 要求 optional 后面必须有条件）。
-  但**只对在源码树里真实存在的文件这么做**——有些文件（如 kpc.c）是 Apple
-  私有实现，开源树里没有，放开后会变成
-        No rule to make target 'osfmk/arm64/kpc.c'
-  所以逐个检查文件是否存在。
+关键观察（来自 CI 导出的 files.arm64 前 40 行）:
+  同一批 arm64 汇编里，绝大多数是 `standard`（无条件编译）:
+        osfmk/arm64/bcopy.s            standard
+        osfmk/arm64/bzero.s            standard
+        osfmk/arm64/lz4_decode_arm64.s standard
+  只有 start.s（以及 caches_asm.s 等少数）带 `optional ...`。
+  而 `arm64` 并不是这个构建系统认识的 tag（试过 `optional arm64`，仍被排除）。
+  所以正确写法是把它改成 `standard`，和 bcopy.s 保持一致。
 
 用法: python3 xnu-stubs/patch_files_arm64.py <xnu 目录>
 """
@@ -36,7 +38,7 @@ def patch_one(root: Path, list_path: Path) -> int:
     for i, line in enumerate(lines):
         if line.lstrip().startswith("#"):
             continue
-        if "nos_arm_asm" not in line:
+        if "start.s" not in line:
             continue
 
         parts = line.split()
@@ -44,18 +46,15 @@ def patch_one(root: Path, list_path: Path) -> int:
             continue
         src_rel = parts[0]
 
-        # 文件不存在就跳过（Apple 私有实现，放开会报 No rule to make target）
+        # 只处理 arm64 的 start.s（x86_64 那个本来就是 standard）
+        if not src_rel.endswith("arm64/start.s"):
+            continue
+
         if not (root / src_rel).exists():
             print(f"跳过（源码不存在）: {src_rel}")
             continue
 
-        new = line
-        new = re.sub(r"(?<![A-Za-z_0-9])nos_arm_asm(?![A-Za-z_0-9])", "", new)
-        new = re.sub(r"&&\s*$", "", new).rstrip()
-        new = re.sub(r"[ \t]+", "\t", new)
-        if re.search(r"\boptional\s*$", new):
-            new = re.sub(r"\boptional\s*$", "optional\tarm64", new)
-
+        new = f"{src_rel}\tstandard"
         if new != line:
             print(f"第 {i + 1} 行: {line}")
             print(f"     -> : {new}")
