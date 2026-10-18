@@ -66,9 +66,12 @@ jobs:
           set -x
           SRC="$GITHUB_WORKSPACE/xnu-stubs/os/firehose_buffer_private.h"
           ls -l "$SRC"
+          # 放到 EXTERNAL_HEADERS/os（在 include path 上，libkern/os 与 bsd/kern 都能找到）
+          mkdir -p xnu/EXTERNAL_HEADERS/os
+          cp "$SRC" xnu/EXTERNAL_HEADERS/os/firehose_buffer_private.h
           cp "$SRC" xnu/libkern/os/firehose_buffer_private.h
-          ls -l xnu/libkern/os/firehose_buffer_private.h
-          head -20 xnu/libkern/os/firehose_buffer_private.h
+          ls -l xnu/EXTERNAL_HEADERS/os/firehose_buffer_private.h
+          head -30 xnu/EXTERNAL_HEADERS/os/firehose_buffer_private.h
 
       - name: 去掉 -Werror（clang 15 比 xnu-8792 当年更严格）
         run: |
