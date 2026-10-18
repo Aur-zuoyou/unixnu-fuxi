@@ -42,6 +42,17 @@ jobs:
           git log --oneline -1
           ls
 
+      - name: 编最小内核（独立程序，稍后被编进固件）
+        run: |
+          set -euo pipefail
+          cd payload
+          aarch64-linux-gnu-gcc -ffreestanding -nostdlib -fpie -pie \
+            -fno-stack-protector -fno-builtin -O2 \
+            -T link.ld -o kernel.elf entry.S kernel.c
+          aarch64-linux-gnu-objcopy -O binary kernel.elf kernel.bin
+          ls -l kernel.elf kernel.bin
+          aarch64-linux-gnu-objdump -h kernel.bin 2>/dev/null | head -5 || true
+          cd ..
       - name: 注入探针驱动
         run: |
           set -euo pipefail
@@ -54,6 +65,7 @@ jobs:
           # 把真机导出的设备树编进驱动：这版固件不把 DT 放进 EFI 配置表，
           # 所以内核启动时只能靠我们自带的一份。
           python3 tools/gen_dtb_blob.py rom/device/fuxi_runtime.dtb "$probe/fuxi_dtb.c"
+          python3 tools/gen_blob.py payload/kernel.bin "$probe/kernel_blob.c" gKernel
           ls -l "$probe"
 
           # ① [Components] 必须插进"已有的"段里; 新追加一个段会被静默忽略。

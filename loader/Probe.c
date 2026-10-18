@@ -41,6 +41,7 @@ STATIC EFI_HANDLE  mImageHandle;
 STATIC EFI_STATUS  mLocateStatus;
 STATIC VOID       *mMapBuf;
 STATIC UINTN       mKernelStack;
+STATIC UINTN       mKernelEntry;
 STATIC UINT32      mFdtFound;
 STATIC UINTN       mCfgCount;
 STATIC UINTN       mMapBufSize;
@@ -309,6 +310,10 @@ Hex (
   真实内核通过 x0 收到设备树指针。这里用同样的约定: x0 = 设备树物理地址。
   本函数只做一件事: 读设备树头部的 magic, 判断是不是合法 DTB, 并把结果画出来。
 **/
+/* 由 tools/gen_blob.py 从 payload/kernel.bin 生成 */
+extern CONST UINT8   gKernelData[];
+extern CONST UINT32  gKernelSize;
+
 /* 由 tools/gen_dtb_blob.py 从 rom/device/fuxi_runtime.dtb 生成 */
 extern CONST UINT8   gFuxiDtbData[];
 extern CONST UINT32  gFuxiDtbSize;
@@ -434,19 +439,25 @@ PayloadEntry (
 
 /** 关中断、换栈、x0=设备树, 跳到入口 */
 STATIC __attribute__((unused)) VOID
-JumpToPayload (
+JumpToKernel (
   IN UINTN  Entry,
   IN UINTN  Dtb,
+  IN UINTN  Fb,
+  IN UINTN  Pitch,
+  IN UINTN  Height,
   IN UINTN  StackTop
   )
 {
   __asm__ __volatile__ (
-    "msr  daifset, #0xf\n"
-    "mov  sp, %2\n"
-    "mov  x0, %1\n"
-    "br   %0\n"
+    "msr  daifset, #0xf\n"      /* 关中断 */
+    "mov  sp, %5\n"             /* 换栈 */
+    "mov  x0, %1\n"             /* x0 = 设备树 */
+    "mov  x1, %2\n"             /* x1 = 帧缓冲 */
+    "mov  x2, %3\n"             /* x2 = 每行像素数 */
+    "mov  x3, %4\n"             /* x3 = 屏幕高度 */
+    "br   %0\n"                 /* 跳到内核入口 */
     :
-    : "r" (Entry), "r" (Dtb), "r" (StackTop)
+    : "r" (Entry), "r" (Dtb), "r" (Fb), "r" (Pitch), "r" (Height), "r" (StackTop)
     : "memory"
     );
 }
@@ -517,7 +528,7 @@ OnTextOut (
   /* 鍙墦鍗板唴閮ㄥ彉閲? 涓嶇敾浠讳綍涓滆タ 鈥斺€?鎺у埗鍙版枃瀛楁槸鑳界湅鍒扮殑閭ｆ潯閫氶亾 */
   UnicodeSPrint (
     Buf, sizeof (Buf),
-    L"v37 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
+    L"v38 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
     mLocateStatus, (UINT64) mFb, (UINT64) mFbSize,
     mFbW, mFbH, mFbPitch, mGopFmt
     );
@@ -664,9 +675,11 @@ OnTextOut (
         }
       }
     } else {
-      /* 退出成功: 关中断 -> 换栈 -> x0=设备树 -> 跳到内核入口 (M4) */
-      if (mKernelStack != 0) {
-        JumpToPayload ((UINTN) PayloadEntry, mFdtAddr, mKernelStack);
+      /* 退出成功: 跳到独立编译的内核 (M5) */
+      if (mKernelStack != 0 && mKernelEntry != 0) {
+        JumpToKernel (mKernelEntry, mFdtAddr,
+                      (UINTN) mFb, (UINTN) mFbPitch, (UINTN) mFbH,
+                      mKernelStack);
       }
     }
 
@@ -743,6 +756,17 @@ ProbeEntry (
   /* 预分配内存图缓冲: 让退出循环里不再有任何分配 */
   mMapBufSize = 128 * 1024;
   mMapBuf     = AllocatePool (mMapBufSize);
+
+  /* 把内嵌内核复制到页对齐的缓冲区（位置无关，可放任意地址） */
+  if (gKernelSize > 0) {
+    UINTN                 Pages = ((UINTN) gKernelSize + EFI_PAGE_SIZE - 1) / EFI_PAGE_SIZE;
+    EFI_PHYSICAL_ADDRESS  Base  = 0;
+    if (!EFI_ERROR (gBS->AllocatePages (AllocateAnyPages, EfiLoaderData,
+                                       Pages, &Base))) {
+      CopyMem ((VOID *) (UINTN) Base, (VOID *) gKernelData, (UINTN) gKernelSize);
+      mKernelEntry = (UINTN) Base;
+    }
+  }
 
   /* 给内核准备 64KB 栈 */
   {
