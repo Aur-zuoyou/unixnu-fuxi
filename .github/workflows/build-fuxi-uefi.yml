@@ -145,6 +145,18 @@ jobs:
           echo "### 可疑的非页对齐常量(0x8F0xxxx 之类)"
           grep -rn "0x8F0\|0x8F09\|0x8F03" edk2-msm/Silicon edk2-msm/Platform 2>/dev/null | head -20 || true
           echo
+          echo
+          echo "### 报错原文出自哪个文件"
+          grep -rn "proper alignment" edk2-msm 2>/dev/null | head -10 || true
+          echo
+          echo "### 该报错附近的代码(前后 30 行)"
+          f=$(grep -rl "proper alignment" edk2-msm 2>/dev/null | head -1)
+          if [ -n "$f" ]; then
+            n=$(grep -n "proper alignment" "$f" | head -1 | cut -d: -f1)
+            s=$((n-30)); [ $s -lt 1 ] && s=1
+            sed -n "${s},$((n+10))p" "$f"
+          fi
+          echo
           echo "### boot-fuxi.img 里找探针 GUID"
           python3 tools/find_probe.py edk2-msm/boot-fuxi.img || true
           echo
