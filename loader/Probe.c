@@ -364,7 +364,7 @@ OnTextOut (
   /* 鍙墦鍗板唴閮ㄥ彉閲? 涓嶇敾浠讳綍涓滆タ 鈥斺€?鎺у埗鍙版枃瀛楁槸鑳界湅鍒扮殑閭ｆ潯閫氶亾 */
   UnicodeSPrint (
     Buf, sizeof (Buf),
-    L"v27 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
+    L"v28 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
     mLocateStatus, (UINT64) mFb, (UINT64) mFbSize,
     mFbW, mFbH, mFbPitch, mGopFmt
     );
@@ -407,7 +407,8 @@ OnTextOut (
           Count = MapSize / DescSize;
           for (idx = 0; idx < Count; idx++) {
             EFI_MEMORY_DESCRIPTOR  *D = (EFI_MEMORY_DESCRIPTOR *) ((UINT8 *) Map + idx * DescSize);
-            if (D->Type >= EfiRuntimeServicesCode && D->Type <= EfiRuntimeServicesData) {
+            /* 关键: 固件看的是 Attribute 里的 EFI_MEMORY_RUNTIME 位, 不是类型 */
+            if ((D->Attribute & EFI_MEMORY_RUNTIME) != 0) {
               Rt++;
               /* 全部打出来: 让我看固件在抱怨哪一条 */
               UnicodeSPrint (Buf, sizeof (Buf),
