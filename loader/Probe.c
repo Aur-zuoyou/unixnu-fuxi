@@ -364,7 +364,7 @@ OnTextOut (
   /* 鍙墦鍗板唴閮ㄥ彉閲? 涓嶇敾浠讳綍涓滆タ 鈥斺€?鎺у埗鍙版枃瀛楁槸鑳界湅鍒扮殑閭ｆ潯閫氶亾 */
   UnicodeSPrint (
     Buf, sizeof (Buf),
-    L"v29 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
+    L"v30 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
     mLocateStatus, (UINT64) mFb, (UINT64) mFbSize,
     mFbW, mFbH, mFbPitch, mGopFmt
     );
@@ -431,14 +431,24 @@ OnTextOut (
       }
     }
 
-    /* 只尝试一次。失败就停住并打印内存图, 不做无意义的循环重试。
-       (固件的 DxeCore 在校验它自己的内存图, loader 改不了) */
+    /* 需要重试的原因(EDK2 的实现顺序):
+         CoreExitBootServices 先 CoreNotifySignalList(EXIT_BOOT_SERVICES),
+         各驱动在回调里分配/释放内存 -> 内存图变化 -> 之前取的 MapKey 失效,
+         然后 CoreTerminateMemoryMap(MapKey) 校验失败, 返回 EFI_INVALID_PARAMETER。
+       第二次调用时回调不会重复执行, 所以再取一次 key 就能成功。
+       循环内不做任何打印/分配, 避免自己又把 key 弄失效。            */
     St = EFI_ABORTED;
     if (mMapBuf != NULL) {
-      MapSize = mMapBufSize;
-      St      = gBS->GetMemoryMap (&MapSize, mMapBuf, &MapKey, &DescSize, &DescVer);
-      if (!EFI_ERROR (St)) {
+      for (idx = 0; idx < 8; idx++) {
+        MapSize = mMapBufSize;
+        St      = gBS->GetMemoryMap (&MapSize, mMapBuf, &MapKey, &DescSize, &DescVer);
+        if (EFI_ERROR (St)) {
+          continue;
+        }
         St = gBS->ExitBootServices (mImageHandle, MapKey);
+        if (!EFI_ERROR (St)) {
+          break;
+        }
       }
     }
 
