@@ -117,24 +117,23 @@ jobs:
           grep -rn "kernelsupport" makedefs 2>/dev/null | head -5 || true
           cd ..
 
-      - name: 诊断 __start 入口符号
+      - name: 诊断 start.s 为什么没被编译
         if: always()
         run: |
           exec > >(tee -a startup.log) 2>&1
           cd xnu
-          echo "== 1. 定义 __start / _start 的位置 =="
-          grep -rn "^__start\|^_start" osfmk libsa pexpert 2>/dev/null | head -20 || true
-          echo "== 2. start.s 开头 =="
-          sed -n "1,45p" osfmk/arm64/start.s 2>/dev/null || echo "(不存在)"
-          echo "== 3. 构建目录里的 start 目标文件 =="
-          find BUILD -name "*start*" 2>/dev/null | head -20 || true
-          echo "== 4. LDFILELIST 里的 start =="
-          for f in $(find BUILD -name "LDFILELIST*" 2>/dev/null | head -3); do
-            echo "--- $f ---"
-            grep -i "start" "$f" | head -10
-          done
-          echo "== 5. 链接命令里的入口参数 =="
-          grep -rn "undefined\|__start\| -e " makedefs/MakeInc.def 2>/dev/null | head -10 || true
+          echo "== 1. arm64 目录有没有 .o =="
+          ls BUILD/obj/RELEASE_ARM64_VMAPPLE/osfmk/arm64/*.o 2>/dev/null | head -30 || echo "(没有)"
+          echo "== 2. 文件清单里 start.s 的写法 =="
+          grep -rn "start\.s" osfmk/conf/* 2>/dev/null | head -10 || echo "(没有)"
+          echo "== 3. files.arm64 里 arm64/ 开头的项 =="
+          grep -n "arm64/" osfmk/conf/files.arm64 2>/dev/null | head -25 || echo "(没有)"
+          echo "== 4. start.s 里的符号定义 =="
+          grep -n "ENTRY\|_start\|LEAF" osfmk/arm64/start.s 2>/dev/null | head -15 || true
+          echo "== 5. 当前平台定义 =="
+          grep -rn "PLATFORM_VMAPPLE\|VMAPPLE" makedefs/*.def makedefs/*.cmd 2>/dev/null | head -10 || true
+          echo "== 6. LDFILELIST 内容（前 40 行）=="
+          for f in $(find BUILD -name "LDFILELIST*" 2>/dev/null | head -1); do head -40 "$f"; done
 
       - name: 构建 XNU（arm64 RELEASE）
         run: |
