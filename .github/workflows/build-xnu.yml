@@ -105,6 +105,14 @@ jobs:
           clang -c /tmp/kernelsupport/stub.c -o /tmp/kernelsupport/stub.o
           ar rcs /tmp/kernelsupport/libVMAPPLE.os.RELEASE.a /tmp/kernelsupport/stub.o
           ar t /tmp/kernelsupport/libVMAPPLE.os.RELEASE.a
+          # 链接器还要 -lfirehose_kernel，放到 SDK 的 kernel 库目录（-L 指向那里）
+          SDK=$(xcrun --sdk macosx --show-sdk-path || true)
+          KLIB="$SDK/usr/local/lib/kernel"
+          sudo mkdir -p "$KLIB"
+          sudo cp /tmp/kernelsupport/stub.o "$KLIB/stub.o"
+          sudo ar rcs "$KLIB/libfirehose_kernel.a" "$KLIB/stub.o"
+          sudo cp /tmp/kernelsupport/libVMAPPLE.os.RELEASE.a "$KLIB/"
+          ls -l "$KLIB"
           ls -l /tmp/kernelsupport/
           grep -rn "kernelsupport" makedefs 2>/dev/null | head -5 || true
           cd ..
