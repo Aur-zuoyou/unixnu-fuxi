@@ -12,6 +12,8 @@
         收尾回调会分配/释放内存，使调用者手里的 MapKey 立即失效。
         实验阶段先跳过比对，确认下游能否跑通。
 
+文件按 glob 自动查找，找不到就跳过（子模块可能还没初始化），不会让构建失败。
+
 用法: python3 tools/patch_firmware.py <edk2-msm 目录>
 """
 
@@ -19,14 +21,19 @@ import re
 import sys
 from pathlib import Path
 
-GRAN_HEADER = "Common/edk2/MdePkg/Include/AArch64/ProcessorBind.h"
-DXE_PAGE = "Common/edk2/MdeModulePkg/Core/Dxe/Mem/Page.c"
+GRAN_GLOB = "**/MdePkg/Include/AArch64/ProcessorBind.h"
+PAGE_GLOB = "**/MdeModulePkg/Core/Dxe/Mem/Page.c"
+
+
+def find_one(root: Path, pattern: str):
+    hits = sorted(root.glob(pattern))
+    return hits[0] if hits else None
 
 
 def patch_granularity(root: Path) -> str:
-    p = root / GRAN_HEADER
-    if not p.exists():
-        return f"补丁1 失败: 找不到 {p}"
+    p = find_one(root, GRAN_GLOB)
+    if p is None:
+        return "补丁1 跳过: 树里找不到 AArch64/ProcessorBind.h（子模块可能未初始化）"
     text = p.read_text(encoding="utf-8", errors="replace")
     new, n = re.subn(
         r"#define\s+RUNTIME_PAGE_ALLOCATION_GRANULARITY\s+\S+",
@@ -34,28 +41,33 @@ def patch_granularity(root: Path) -> str:
         text,
     )
     if n == 0:
-        return f"补丁1 失败: {p} 里没有匹配到宏定义"
+        if "RUNTIME_PAGE_ALLOCATION_GRANULARITY 1" in text:
+            return f"补丁1 已打过 ({p})"
+        return f"补丁1 失败: {p} 里没匹配到宏定义"
     p.write_text(new, encoding="utf-8")
-    return f"补丁1 成功: 替换 {n} 处 ({p.relative_to(root)})"
+    return f"补丁1 成功: 替换 {n} 处 ({p})"
 
 
 def patch_mapkey(root: Path) -> str:
-    p = root / DXE_PAGE
-    if not p.exists():
-        return f"补丁2 失败: 找不到 {p}"
+    p = find_one(root, PAGE_GLOB)
+    if p is None:
+        return "补丁2 跳过: 树里找不到 Core/Dxe/Mem/Page.c"
     text = p.read_text(encoding="utf-8", errors="replace")
     if "if (MapKey == mMemoryMapKey)" not in text:
+        if "if (1)" in text:
+            return f"补丁2 已打过 ({p})"
         return f"补丁2 失败: {p} 里没有 MapKey 比对语句"
-    new = text.replace("if (MapKey == mMemoryMapKey)", "if (1)")
-    p.write_text(new, encoding="utf-8")
-    return f"补丁2 成功: 跳过 MapKey 比对 ({p.relative_to(root)})"
+    p.write_text(text.replace("if (MapKey == mMemoryMapKey)", "if (1)"), encoding="utf-8")
+    return f"补丁2 成功: 跳过 MapKey 比对 ({p})"
 
 
 def check(root: Path) -> str:
-    gran = (root / GRAN_HEADER).read_text(encoding="utf-8", errors="replace")
-    page = (root / DXE_PAGE).read_text(encoding="utf-8", errors="replace")
-    g = "define RUNTIME_PAGE_ALLOCATION_GRANULARITY 1" in gran
-    m = "if (1)" in page
+    gh = find_one(root, GRAN_GLOB)
+    pg = find_one(root, PAGE_GLOB)
+    g = gh is not None and "define RUNTIME_PAGE_ALLOCATION_GRANULARITY 1" in gh.read_text(
+        encoding="utf-8", errors="replace"
+    )
+    m = pg is not None and "if (1)" in pg.read_text(encoding="utf-8", errors="replace")
     return f"校验: granularity={int(g)} mapkey={int(m)}"
 
 

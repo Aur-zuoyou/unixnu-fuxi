@@ -81,6 +81,9 @@ jobs:
 
       - name: 固件补丁：放宽 DxeCore 检查（实验性）
         run: |
+          # Common/edk2 是子模块, clone --depth 1 不会拉, 必须先初始化
+          ( cd edk2-msm && git submodule update --init --recursive --depth 1 ) || true
+          ls edk2-msm/Common/edk2/MdePkg/Include/AArch64/ProcessorBind.h || echo "子模块未就绪"
           # 补丁1: RUNTIME_PAGE_ALLOCATION_GRANULARITY 0x10000 -> 1
           #        (AArch64 为 64KB 粒度, 高通平台按 4KB 布局, 导致退出失败)
           # 补丁2: CoreTerminateMemoryMap 的 MapKey 比对改为恒真
