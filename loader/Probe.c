@@ -309,6 +309,54 @@ Hex (
   真实内核通过 x0 收到设备树指针。这里用同样的约定: x0 = 设备树物理地址。
   本函数只做一件事: 读设备树头部的 magic, 判断是不是合法 DTB, 并把结果画出来。
 **/
+/** 在 EFI 配置表里找设备树: 先按 GUID, 再按魔数兜底。
+    注意: 驱动入口时配置表还没齐, 必须在退出前再调一次。 */
+STATIC __attribute__((unused)) VOID
+FindFdt (
+  VOID
+  )
+{
+  UINTN  i;
+
+  if (gST == NULL) {
+    return;
+  }
+  mCfgCount = gST->NumberOfTableEntries;
+  mFdtFound = 0;
+  mFdtAddr  = 0;
+  mFdtSize  = 0;
+
+  for (i = 0; i < gST->NumberOfTableEntries; i++) {
+    if (CompareGuid (&gST->ConfigurationTable[i].VendorGuid, &mFdtTableGuid)) {
+      UINT8  *F = (UINT8 *) gST->ConfigurationTable[i].VendorTable;
+      if (F != NULL) {
+        mFdtAddr  = (UINTN) F;
+        mFdtSize  = ((UINT32) F[4] << 24) | ((UINT32) F[5] << 16) |
+                    ((UINT32) F[6] << 8) | (UINT32) F[7];
+        mFdtFound = 2;      /* 2 = 按 GUID 命中 */
+        return;
+      }
+    }
+  }
+
+  for (i = 0; i < gST->NumberOfTableEntries; i++) {
+    UINT8   *F = (UINT8 *) gST->ConfigurationTable[i].VendorTable;
+    UINT32   M;
+    if (F == NULL) {
+      continue;
+    }
+    M = ((UINT32) F[0] << 24) | ((UINT32) F[1] << 16) |
+        ((UINT32) F[2] << 8)  | (UINT32) F[3];
+    if (M == 0xD00DFEEDUL) {
+      mFdtAddr  = (UINTN) F;
+      mFdtSize  = ((UINT32) F[4] << 24) | ((UINT32) F[5] << 16) |
+                  ((UINT32) F[6] << 8) | (UINT32) F[7];
+      mFdtFound = 1;        /* 1 = 按魔数命中 */
+      return;
+    }
+  }
+}
+
 STATIC __attribute__((unused)) VOID
 PayloadEntry (
   IN UINT64  Dtb
@@ -347,7 +395,7 @@ PayloadEntry (
   DrawString (40, yy, Magic == 0xD00DFEEDUL ? "DT OK" : "DT BAD", 0xFFFFFFFF);
   yy += LINE_H;
 
-  DrawString (40, yy, mFdtFound ? "FOUND 1" : "FOUND 0", 0xFFFFFFFF);
+  DrawString (40, yy, mFdtFound == 2 ? "BY GUID" : (mFdtFound == 1 ? "BY MAGIC" : "NOT FOUND"), 0xFFFFFFFF);
   yy += LINE_H;
 
   DrawString (40, yy, "CFG", 0xFFFFFFFF);
@@ -452,11 +500,12 @@ OnTextOut (
   }
 
   RefreshGop ();     /* 入口时 FrameBufferBase 可能是 0, 这里重读 */
+  FindFdt ();        /* 配置表到这时才齐, 重新找一次设备树 */
 
   /* 鍙墦鍗板唴閮ㄥ彉閲? 涓嶇敾浠讳綍涓滆タ 鈥斺€?鎺у埗鍙版枃瀛楁槸鑳界湅鍒扮殑閭ｆ潯閫氶亾 */
   UnicodeSPrint (
     Buf, sizeof (Buf),
-    L"v35 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
+    L"v36 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
     mLocateStatus, (UINT64) mFb, (UINT64) mFbSize,
     mFbW, mFbH, mFbPitch, mGopFmt
     );
@@ -674,26 +723,7 @@ ProbeEntry (
   (VOID) SystemTable;
   mImageHandle = ImageHandle;
 
-  mCfgCount = gST->NumberOfTableEntries;
-
-  /* 找设备树: 不依赖 GUID —— 直接看哪一块配置表数据的开头是 DTB 魔数。
-     (实测这版固件没有按 b1b621d5-... 发布, 所以按 GUID 找不到) */
-  for (i = 0; i < gST->NumberOfTableEntries; i++) {
-    UINT8   *F = (UINT8 *) gST->ConfigurationTable[i].VendorTable;
-    UINT32   M = 0;
-    if (F == NULL) {
-      continue;
-    }
-    M = ((UINT32) F[0] << 24) | ((UINT32) F[1] << 16) |
-        ((UINT32) F[2] << 8)  | (UINT32) F[3];
-    if (M == 0xD00DFEEDUL) {
-      mFdtAddr = (UINTN) F;
-      mFdtSize = ((UINT32) F[4] << 24) | ((UINT32) F[5] << 16) |
-                 ((UINT32) F[6] << 8) | (UINT32) F[7];
-      mFdtFound = 1;
-      break;
-    }
-  }
+  FindFdt ();
 
   Status = gBS->LocateProtocol (&gEfiGraphicsOutputProtocolGuid, NULL, (VOID **) &Gop);
   mLocateStatus = Status;
