@@ -25,6 +25,18 @@ if ! command -v make >/dev/null 2>&1; then
     exit 1
 fi
 
+# Xcode 15+ 的 SDK 删了 availability.pl，xnu 会因此失败；这里是兜底
+SDK="$(xcrun --sdk macosx --show-sdk-path 2>/dev/null || true)"
+if [ -n "$SDK" ]; then
+    AVA="$SDK/usr/local/libexec/availability.pl"
+    if [ ! -x "$AVA" ]; then
+        echo "=== 缺少 availability.pl，造最小替身 ==="
+        sudo mkdir -p "$(dirname "$AVA")"
+        printf '#!/usr/bin/env perl\nexit 0;\n' | sudo tee "$AVA" >/dev/null
+        sudo chmod +x "$AVA"
+    fi
+    echo "availability.pl: $AVA"
+fi
 if [ ! -d xnu ]; then
     echo "=== 克隆 XNU $XNU_TAG ==="
     git clone --depth 1 --branch "$XNU_TAG" \
