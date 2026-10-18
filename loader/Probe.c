@@ -309,6 +309,10 @@ Hex (
   真实内核通过 x0 收到设备树指针。这里用同样的约定: x0 = 设备树物理地址。
   本函数只做一件事: 读设备树头部的 magic, 判断是不是合法 DTB, 并把结果画出来。
 **/
+/* 由 tools/gen_dtb_blob.py 从 rom/device/fuxi_runtime.dtb 生成 */
+extern CONST UINT8   gFuxiDtbData[];
+extern CONST UINT32  gFuxiDtbSize;
+
 /** 在 EFI 配置表里找设备树: 先按 GUID, 再按魔数兜底。
     注意: 驱动入口时配置表还没齐, 必须在退出前再调一次。 */
 STATIC __attribute__((unused)) VOID
@@ -355,6 +359,14 @@ FindFdt (
       return;
     }
   }
+
+  /* 配置表里没有: 用编进本驱动的设备树
+     (实测这版固件不把 DT 放进配置表) */
+  if (gFuxiDtbSize > 0) {
+    mFdtAddr  = (UINTN) gFuxiDtbData;
+    mFdtSize  = (UINT32) gFuxiDtbSize;
+    mFdtFound = 3;          /* 3 = 内嵌副本 */
+  }
 }
 
 STATIC __attribute__((unused)) VOID
@@ -395,7 +407,7 @@ PayloadEntry (
   DrawString (40, yy, Magic == 0xD00DFEEDUL ? "DT OK" : "DT BAD", 0xFFFFFFFF);
   yy += LINE_H;
 
-  DrawString (40, yy, mFdtFound == 2 ? "BY GUID" : (mFdtFound == 1 ? "BY MAGIC" : "NOT FOUND"), 0xFFFFFFFF);
+  DrawString (40, yy, mFdtFound == 2 ? "BY GUID" : (mFdtFound == 1 ? "BY MAGIC" : (mFdtFound == 3 ? "BUILTIN" : "NOT FOUND")), 0xFFFFFFFF);
   yy += LINE_H;
 
   DrawString (40, yy, "CFG", 0xFFFFFFFF);
@@ -505,7 +517,7 @@ OnTextOut (
   /* 鍙墦鍗板唴閮ㄥ彉閲? 涓嶇敾浠讳綍涓滆タ 鈥斺€?鎺у埗鍙版枃瀛楁槸鑳界湅鍒扮殑閭ｆ潯閫氶亾 */
   UnicodeSPrint (
     Buf, sizeof (Buf),
-    L"v36 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
+    L"v37 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
     mLocateStatus, (UINT64) mFb, (UINT64) mFbSize,
     mFbW, mFbH, mFbPitch, mGopFmt
     );

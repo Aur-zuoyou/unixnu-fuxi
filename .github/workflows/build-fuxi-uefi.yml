@@ -51,6 +51,10 @@ jobs:
           probe=edk2-msm/Platform/Xiaomi/sm8550/probe
           mkdir -p "$probe"
           cp loader/Probe.c loader/Probe.inf "$probe"/
+          # 把真机导出的设备树编进驱动：这版固件不把 DT 放进 EFI 配置表，
+          # 所以内核启动时只能靠我们自带的一份。
+          python3 tools/gen_dtb_blob.py rom/device/fuxi_runtime.dtb "$probe/fuxi_dtb.c"
+          ls -l "$probe"
 
           # ① [Components] 必须插进"已有的"段里; 新追加一个段会被静默忽略。
           #    而且不能瞎 grep: 别的机型的 DSC 也有这个段。必须顺着 fuxi.dsc 的
