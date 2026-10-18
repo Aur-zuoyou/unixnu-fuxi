@@ -2,24 +2,24 @@ name: build-xnu
 
 # 在 macOS runner 上原生构建开源 XNU（arm64）。
 #
-# 为什么用 macOS runner：
-#   XNU 自带的 Makefile 依赖 xcrun / macOS SDK / macOS 的 sysctl 语义，
-#   在 Linux 上模拟这些是无底洞。GitHub Actions 提供 macos-14（自带 Xcode），
-#   这是 Apple 官方支持的构建方式。
+# 已知问题与对策:
+#   1) Xcode 15 的 SDK 缺少 availability.pl      -> 兜底造一个
+#   2) clang 15 把警告当错误（80 处 -Werror）     -> 构建前删掉 -Werror
+#   3) 4 个 Apple 私有 firehose 头不存在          -> 用 xnu-stubs 里的 shim 替换
 #
-# 产物：BUILD/obj/RELEASE_ARM64 下的 kernel 相关文件 + 完整构建日志
+# 产物: xnu/BUILD 打包 + 全部日志
 
 on:
   push:
     paths:
       - ".github/workflows/build-xnu.yml"
+      - "xnu-stubs/**"
       - "scripts/build-xnu-macos.sh"
       - "scripts/inspect-xnu-macos.sh"
-  workflow_dispatch:      # 也可以在 Actions 页面手动点 "Run workflow"
+  workflow_dispatch:
 
 jobs:
   build:
-    # macos-14 = Apple Silicon(M1)，比 macos-13 快 2-3 倍，池子也更大
     runs-on: macos-14
     timeout-minutes: 120
     steps:
@@ -31,11 +31,18 @@ jobs:
           sw_vers
           xcode-select -p
           clang --version || true
-          uname -a
           sysctl -n hw.ncpu || true
-          df -h /
 
-      - name: 修 Xcode 15+ 缺 availability.pl 的问题
+      - name: 取 XNU 源码
+        run: |
+          exec > >(tee -a fetch.log) 2>&1
+          set -x
+          git clone --depth 1 --branch xnu-8792.81.2 https://github.com/apple-oss-distributions/xnu.git
+          cd xnu
+          git log --oneline -1
+          sed -n '/typedef struct boot_args/,/boot_args;/p' pexpert/pexpert/arm64/boot.h
+
+      - name: 造 availability.pl（Xcode 15+ 才有问题）
         run: |
           exec > >(tee -a fixup.log) 2>&1
           set -x
@@ -44,26 +51,14 @@ jobs:
           if [ -n "$SDK" ]; then
             TARGET="$SDK/usr/local/libexec"
             if [ ! -x "$TARGET/availability.pl" ]; then
-              echo "缺少 availability.pl，造一个最小替身"
               sudo mkdir -p "$TARGET"
               printf '#!/usr/bin/env perl\nexit 0;\n' | sudo tee "$TARGET/availability.pl" >/dev/null
               sudo chmod +x "$TARGET/availability.pl"
             fi
             ls -l "$TARGET/availability.pl" || true
           fi
-      - name: 取 XNU 源码
-        run: |
-          exec > >(tee -a fetch.log) 2>&1
-          set -x
-          git clone --depth 1 --branch xnu-8792.81.2 \
-            https://github.com/apple-oss-distributions/xnu.git
-          cd xnu
-          git log --oneline -1
-          ls
-          echo "=== boot_args 定义 ==="
-          sed -n '/typedef struct boot_args/,/boot_args;/p' pexpert/pexpert/arm64/boot.h
 
-      - name: 用 shim 切断对 Apple 私有 firehose 头的依赖
+      - name: 用 shim 替换私有 firehose 头
         run: |
           exec > >(tee -a shim.log) 2>&1
           set -x
@@ -72,28 +67,33 @@ jobs:
           ls -l "$SHIM"
           cp "$SHIM" libkern/os/fuxi_firehose_stub.h
           cp "$SHIM" bsd/kern/fuxi_firehose_stub.h
+
           for f in libkern/os/log.c bsd/kern/subr_log.c; do
-            echo "=== 处理 $f ==="
-            # 把 4 个私有头替换成我们的 shim
-            sed -i '' 's|#include <firehose/tracepoint_private.h>|#include "fuxi_firehose_stub.h"|' "$f" 2>/dev/null || \
-            sed -i 's|#include <firehose/tracepoint_private.h>|#include "fuxi_firehose_stub.h"|' "$f"
-            sed -i '' 's|#include <firehose/chunk_private.h>||; s|#include <firehose/ioctl_private.h>||; s|#include <os/firehose_buffer_private.h>||; s|#include <os/firehose.h>||' "$f" 2>/dev/null || \
-            sed -i 's|#include <firehose/chunk_private.h>||; s|#include <firehose/ioctl_private.h>||; s|#include <os/firehose_buffer_private.h>||; s|#include <os/firehose.h>||' "$f"
-            grep -n "fuxi_firehose_stub" "$f" | head -5
+            echo "=== $f ==="
+            sed -i '' 's|#include <firehose/tracepoint_private.h>|#include "fuxi_firehose_stub.h"|' "$f"
+            sed -i '' 's|#include <firehose/chunk_private.h>||' "$f"
+            sed -i '' 's|#include <firehose/ioctl_private.h>||' "$f"
+            sed -i '' 's|#include <os/firehose_buffer_private.h>||' "$f"
+            sed -i '' 's|#include <os/firehose.h>||' "$f"
+            grep -n "fuxi_firehose_stub" "$f" | head -3
           done
-          echo "=== 树内 firehose_types_private.h 的完整定义（供参考）==="
+
+          echo "=== 树内 firehose_types_private.h（前 200 行，供写 shim 参考）==="
           sed -n '1,200p' libkern/firehose/firehose_types_private.h
-      - name: 去掉 -Werror（Xcode 15 的 clang 比 xnu-8792 当年更严格）
+
+      - name: 去掉 -Werror（clang 15 比 xnu-8792 当年更严格）
         run: |
           exec > >(tee -a werror.log) 2>&1
           set -x
           cd xnu
-          echo "=== -Werror 出现在这些文件里 ==="
-          grep -rl -- "-Werror" makedefs bsd iokit osfmk libkern 2>/dev/null | head -20 || true
+          echo "=== 有 -Werror 的文件 ==="
+          grep -rl -- "-Werror" makedefs 2>/dev/null | head -20 || true
           for f in $(grep -rl -- "-Werror" makedefs 2>/dev/null); do
-            sed -i '' 's/-Werror//g' "$f" 2>/dev/null || sed -i 's/-Werror//g' "$f"
+            sed -i '' 's/-Werror//g' "$f"
+          done
           echo "=== 处理后 ==="
-          grep -rn -- "-Werror" makedefs 2>/dev/null | head -10 || echo "(已清空)"
+          grep -rn -- "-Werror" makedefs 2>/dev/null | head -5 || echo "(已清空)"
+
       - name: 构建 XNU（arm64 RELEASE）
         run: |
           exec > >(tee -a build.log) 2>&1
@@ -104,38 +104,6 @@ jobs:
           find BUILD -maxdepth 4 -type f \( -name "kernel*" -o -name "*.t?" -o -name "mach*" \) 2>/dev/null | head -40
           ls -lh BUILD/obj/RELEASE_ARM64/ 2>/dev/null || true
 
-      - name: 抓取 firehose 的全部依赖（为写替身头文件）
-        if: always()
-        run: |
-          exec > >(tee -a firehose.log) 2>&1
-          cd xnu
-          echo "########## 1. 两个文件里用到的所有 firehose/os_log 标识 ##########"
-          grep -ohE "\b(firehose_[a-z_0-9]+|__firehose_[a-z_0-9]+|FIREHOSE_[A-Z_0-9]+|OS_LOG_[A-Z_0-9]+|logmem_[a-z_0-9]+|os_log_[a-z_0-9]+|oslog_[a-z_0-9]+)\b" \
-            libkern/os/log.c bsd/kern/subr_log.c 2>/dev/null | sort -u
-
-          echo
-          echo "########## 2. log.c 的 include 与结构定义区 ##########"
-          sed -n '25,70p' libkern/os/log.c
-
-          echo
-          echo "########## 3. subr_log.c 的 include 与全局定义区 ##########"
-          sed -n '70,150p' bsd/kern/subr_log.c
-
-          echo
-          echo "########## 4. 树内已有的相关头文件 ##########"
-          echo "--- libkern/os/firehose.h ---"
-          sed -n '1,60p' libkern/os/firehose.h 2>/dev/null
-          echo "--- libkern/firehose/firehose_types_private.h ---"
-          sed -n '1,60p' libkern/firehose/firehose_types_private.h 2>/dev/null
-
-          echo
-          echo "########## 5. EXTERNAL_HEADERS 目录结构 ##########"
-          ls EXTERNAL_HEADERS 2>/dev/null | head -20
-          ls -la EXTERNAL_HEADERS/os 2>/dev/null | head -20
-
-          echo
-          echo "########## 6. 头文件搜索路径 ##########"
-          grep -rn "EXTERNAL_HEADERS\|INCFLAGS" makedefs/MakeInc.cmd makedefs/MakeInc.top 2>/dev/null | head -20
       - name: 打包产物
         if: always()
         run: |
@@ -152,15 +120,16 @@ jobs:
         run: |
           exec > >(tee -a summary.txt) 2>&1
           echo "### date: $(date -u)"
-          for f in env.log fetch.log build.log pack.log; do
+          for f in env.log fetch.log fixup.log shim.log werror.log build.log pack.log; do
             echo
             echo "########## $f ##########"
             if [ -f "$f" ]; then
               echo "--- 行数: $(wc -l < "$f") ---"
-              tail -120 "$f"
+              tail -100 "$f"
             else
               echo "(没有该文件)"
             fi
+          done
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -169,11 +138,11 @@ jobs:
           path: |
             env.log
             fetch.log
+            fixup.log
+            shim.log
+            werror.log
             build.log
             pack.log
-            werror.log
-            firehose.log
-            shim.log
             summary.txt
             out/xnu-build-artifacts.tar.bz2
           if-no-files-found: warn
