@@ -80,6 +80,7 @@ jobs:
             sed -i '' 's|#include <firehose/chunk_private.h>||; s|#include <firehose/ioctl_private.h>||; s|#include <os/firehose_buffer_private.h>||; s|#include <os/firehose.h>||' "$f" 2>/dev/null || \
             sed -i 's|#include <firehose/chunk_private.h>||; s|#include <firehose/ioctl_private.h>||; s|#include <os/firehose_buffer_private.h>||; s|#include <os/firehose.h>||' "$f"
             grep -n "fuxi_firehose_stub" "$f" | head -5
+          done
           echo "=== 树内 firehose_types_private.h 的完整定义（供参考）==="
           sed -n '1,200p' libkern/firehose/firehose_types_private.h
       - name: 去掉 -Werror（Xcode 15 的 clang 比 xnu-8792 当年更严格）
