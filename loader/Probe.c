@@ -356,8 +356,24 @@ OnTextOut (
   /* ---- 裸机: 只用内存 ---- */
   Fill (0xFF000000);
 
-  /* 测试1: 实心矩形 —— 验证坐标与步长 */
-  DrawRect (40, 100, 400, 300, 0xFFFFFFFF);
+  /* 测试1: 用 5 种"每行像素数"各画一个矩形, 哪个是正的, 哪个就是真值 */
+  {
+    UINT32  cand[5];
+    UINT32  ci;
+    cand[0] = mFbPitch;          /* GOP 报的值 */
+    cand[1] = mFbW;              /* 宽度 */
+    cand[2] = mFbW + 32;         /* 宽度+填充 */
+    cand[3] = mFbW + 64;
+    cand[4] = mFbW * 2;
+
+    for (ci = 0; ci < 5; ci++) {
+      UINT32  save = mFbPitch;
+      mFbPitch = cand[ci];
+      DrawRect (40, 100 + ci * 230, 260, 130, 0xFFFFFFFF);
+      mFbPitch = save;
+    }
+    mFbPitch = cand[0];
+  }
 
   /* 测试2: 竖条 —— 验证宽度边界(mFbW 是否算对) */
   DrawRect (1000, 100, 40, 1500, 0xFFFF0000);
