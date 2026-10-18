@@ -333,7 +333,7 @@ OnTextOut (
 
   UnicodeSPrint (
     Buf, sizeof (Buf),
-    L"[fuxi-probe v16] W=%u H=%u PPSL=%u FMT=%u FBSZ=%Lu\r\n",
+    L"[fuxi-probe v17] W=%u H=%u PPSL=%u FMT=%u FBSZ=%Lu\r\n",
     mFbW, mFbH, mFbPitch,
     (UINT32) (mGopFmt), (UINT64) mFbSize
     );
@@ -353,7 +353,22 @@ OnTextOut (
 
   LeaveBootServices (mImageHandle);
 
-  /* 不擦屏、不画任何东西: 让刚才打印的文字留在屏幕上 */
+  /* ---- 决定性实验: 用嵌套循环按 stride 整屏填充 ----
+     整屏变白 => stride 正确
+     横条纹   => stride 太大
+     斜撕裂   => stride 太小                                    */
+  {
+    UINT32  x;
+    UINT32  y2;
+    for (y2 = 0; y2 < mFbH && y2 < 2400; y2++) {
+      for (x = 0; x < mFbW && x < 1200; x++) {
+        PutPixel (x, y2, 0xFFFFFFFF);
+      }
+    }
+    /* 左上角画一个小方块作为对照(理论上会被上面的白盖住) */
+    DrawRect (0, 0, 200, 200, 0xFFFF0000);
+  }
+
   Halt ();
 }
 
