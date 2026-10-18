@@ -163,26 +163,27 @@ jobs:
           find BUILD -maxdepth 4 -type f \( -name "kernel*" -o -name "*.t?" -o -name "mach*" \) 2>/dev/null | head -40
           ls -lh BUILD/obj/RELEASE_ARM64/ 2>/dev/null || true
 
-      - name: 诊断 start.s（构建之后）
+      - name: 诊断 config 的 tag 与 arm64 汇编的归属
         if: always()
         run: |
           exec > >(tee -a startup.log) 2>&1
           cd xnu
-          echo "== 1. start.o 是否存在 =="
-          find BUILD -name "start.o" 2>/dev/null | head -5 || echo "(没有 start.o)"
-          echo "== 2. config 生成的 Makefile 里有没有 start =="
-          for f in $(find BUILD -name "Makefile" -path "*osfmk*" 2>/dev/null | head -3); do
-            echo "--- $f ---"
-            grep -n "start" "$f" | head -5
+          echo "== 1. 生成的 Makefile 里有没有 arm64 相关内容 =="
+          for f in $(find BUILD -name "Makefile" -path "*osfmk/RELEASE*" 2>/dev/null | head -1); do
+            echo "--- $f: 行数 $(wc -l < "$f") ---"
+            grep -c "arm64" "$f" || true
+            grep -n "arm64/" "$f" | head -10 || true
           done
-          echo "== 3. files.arm64 里 start.s 现在长什么样 =="
-          grep -n "arm64/start.s" osfmk/conf/files.arm64 || echo "(没有)"
-          echo "== 4. start.s 内部的平台条件 =="
-          grep -n "VMAPPLE\|XNU_TARGET_OS_OSX\|^#if\|^#endif\|__start" osfmk/arm64/start.s | head -30 || true
-          echo "== 5. 符号表里有没有 __start =="
-          for b in $(find BUILD -name "*.dylib" -o -name "kernel.release*" 2>/dev/null | head -3); do
-            echo "--- $b ---"; nm "$b" 2>/dev/null | grep -i "start" | head -5
-          done
+          echo "== 2. 所有 conf 文件里提到 start.s 的地方 =="
+          grep -rn "start\.s" osfmk/conf bsd/conf libsa/conf pexpert/conf iokit/conf 2>/dev/null | head -20 || true
+          echo "== 3. files.arm64 前 40 行（看约定）=="
+          sed -n "1,40p" osfmk/conf/files.arm64
+          echo "== 4. nos_arm_asm 在哪些 conf 里出现 =="
+          grep -rln "nos_arm_asm" osfmk/conf bsd/conf libsa/conf pexpert/conf 2>/dev/null | head -10 || true
+          grep -rc "nos_arm_asm" osfmk/conf/files.arm64 2>/dev/null || true
+          echo "== 5. config 工具本身（看它怎么解析）=="
+          ls SETUP/config/ 2>/dev/null | head -10 || true
+          grep -n "optional" SETUP/config/mkglue.c 2>/dev/null | head -5 || true
 
       - name: 打包产物
         if: always()
