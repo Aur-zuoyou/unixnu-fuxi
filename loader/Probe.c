@@ -39,6 +39,8 @@ STATIC UINT32      mGopFmt;
 STATIC UINT32      mFbH;
 STATIC EFI_HANDLE  mImageHandle;
 STATIC EFI_STATUS  mLocateStatus;
+STATIC VOID       *mMapBuf;
+STATIC UINTN       mMapBufSize;
 
 /* ---------------- 8x8 鐐归樀瀛椾綋 ---------------- */
 
@@ -362,7 +364,7 @@ OnTextOut (
   /* 鍙墦鍗板唴閮ㄥ彉閲? 涓嶇敾浠讳綍涓滆タ 鈥斺€?鎺у埗鍙版枃瀛楁槸鑳界湅鍒扮殑閭ｆ潯閫氶亾 */
   UnicodeSPrint (
     Buf, sizeof (Buf),
-    L"v26 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
+    L"v27 st=%r fb=%Lx sz=%Lx w=%u h=%u p=%u f=%u\r\n",
     mLocateStatus, (UINT64) mFb, (UINT64) mFbSize,
     mFbW, mFbH, mFbPitch, mGopFmt
     );
@@ -428,31 +430,21 @@ OnTextOut (
       }
     }
 
-    /* 第二遍: 取图后立刻退出, 中间不打印、不分配 */
+    /* 第二遍: 用入口处预分配好的缓冲, 循环里零分配、零打印, 高频重试。
+       内存图在 DXE 收尾阶段仍在变化, 所以多试几次比"算准 key"更实际。 */
     St = EFI_ABORTED;
-    for (idx = 0; idx < 6; idx++) {
-      MapSize = 0;
-      St      = gBS->GetMemoryMap (&MapSize, NULL, &MapKey, &DescSize, &DescVer);
-      if (St != EFI_BUFFER_TOO_SMALL) {
-        break;
+    if (mMapBuf != NULL) {
+      for (idx = 0; idx < 200; idx++) {
+        MapSize = mMapBufSize;
+        St      = gBS->GetMemoryMap (&MapSize, mMapBuf, &MapKey, &DescSize, &DescVer);
+        if (EFI_ERROR (St)) {
+          continue;
+        }
+        St = gBS->ExitBootServices (mImageHandle, MapKey);
+        if (!EFI_ERROR (St)) {
+          break;
+        }
       }
-      MapSize += 8 * DescSize;
-      Map      = (EFI_MEMORY_DESCRIPTOR *) AllocatePool (MapSize);
-      if (Map == NULL) {
-        break;
-      }
-      St = gBS->GetMemoryMap (&MapSize, Map, &MapKey, &DescSize, &DescVer);
-      if (EFI_ERROR (St)) {
-        FreePool (Map);
-        Map = NULL;
-        continue;
-      }
-      St = gBS->ExitBootServices (mImageHandle, MapKey);
-      if (!EFI_ERROR (St)) {
-        break;
-      }
-      FreePool (Map);
-      Map = NULL;
     }
 
     if (EFI_ERROR (St)) {
@@ -495,6 +487,10 @@ ProbeEntry (
 
   Status = gBS->LocateProtocol (&gEfiGraphicsOutputProtocolGuid, NULL, (VOID **) &Gop);
   mLocateStatus = Status;
+
+  /* 预分配内存图缓冲: 让退出循环里不再有任何分配 */
+  mMapBufSize = 128 * 1024;
+  mMapBuf     = AllocatePool (mMapBufSize);
   if (!EFI_ERROR (Status) && Gop != NULL && Gop->Mode != NULL) {
     mFb     = (UINT8 *) (UINTN) Gop->Mode->FrameBufferBase;
     mFbSize = (UINTN) Gop->Mode->FrameBufferSize;
