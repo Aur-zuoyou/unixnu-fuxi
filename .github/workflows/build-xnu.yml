@@ -85,25 +85,38 @@ jobs:
           find BUILD -maxdepth 4 -type f \( -name "kernel*" -o -name "*.t?" -o -name "mach*" \) 2>/dev/null | head -40
           ls -lh BUILD/obj/RELEASE_ARM64/ 2>/dev/null || true
 
-      - name: 诊断缺失的 firehose 头文件
+      - name: 抓取 firehose 的全部依赖（为写替身头文件）
         if: always()
         run: |
           exec > >(tee -a firehose.log) 2>&1
-          set -x
           cd xnu
-          echo "=== log.c 里用到的 firehose 相关标识 ==="
-          grep -n -i "firehose\|os_log" libkern/os/log.c | head -40 || true
-          echo "=== subr_log.c 里用到的 ==="
-          grep -n -i "firehose" bsd/kern/subr_log.c | head -40 || true
-          echo "=== EXTERNAL_HEADERS/os 目录内容 ==="
-          ls EXTERNAL_HEADERS/os/ 2>/dev/null | head -30 || echo "(无此目录)"
-          echo "=== 树里有没有 firehose 相关文件 ==="
-          find . -iname "*firehose*" 2>/dev/null | head -10 || true
-          echo "=== SDK 里有没有 ==="
-          SDK=$(xcrun --sdk macosx --show-sdk-path || true)
-          find "$SDK" -iname "*firehose*" 2>/dev/null | head -10 || echo "(SDK 里没有)"
-          echo "=== 头文件搜索路径（看 XNU 期望从哪拿）==="
-          grep -rn "EXTERNAL_HEADERS" makedefs/MakeInc.cmd | head -10 || true
+          echo "########## 1. 两个文件里用到的所有 firehose/os_log 标识 ##########"
+          grep -ohE "\b(firehose_[a-z_0-9]+|__firehose_[a-z_0-9]+|FIREHOSE_[A-Z_0-9]+|OS_LOG_[A-Z_0-9]+|logmem_[a-z_0-9]+|os_log_[a-z_0-9]+|oslog_[a-z_0-9]+)\b" \
+            libkern/os/log.c bsd/kern/subr_log.c 2>/dev/null | sort -u
+
+          echo
+          echo "########## 2. log.c 的 include 与结构定义区 ##########"
+          sed -n '25,70p' libkern/os/log.c
+
+          echo
+          echo "########## 3. subr_log.c 的 include 与全局定义区 ##########"
+          sed -n '70,150p' bsd/kern/subr_log.c
+
+          echo
+          echo "########## 4. 树内已有的相关头文件 ##########"
+          echo "--- libkern/os/firehose.h ---"
+          sed -n '1,60p' libkern/os/firehose.h 2>/dev/null
+          echo "--- libkern/firehose/firehose_types_private.h ---"
+          sed -n '1,60p' libkern/firehose/firehose_types_private.h 2>/dev/null
+
+          echo
+          echo "########## 5. EXTERNAL_HEADERS 目录结构 ##########"
+          ls EXTERNAL_HEADERS 2>/dev/null | head -20
+          ls -la EXTERNAL_HEADERS/os 2>/dev/null | head -20
+
+          echo
+          echo "########## 6. 头文件搜索路径 ##########"
+          grep -rn "EXTERNAL_HEADERS\|INCFLAGS" makedefs/MakeInc.cmd makedefs/MakeInc.top 2>/dev/null | head -20
       - name: 打包产物
         if: always()
         run: |
