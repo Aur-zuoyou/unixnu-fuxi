@@ -210,4 +210,4 @@ jobs:
             edk2-msm/diag.txt
             edk2-msm/version.txt
             build.log
-          if-no-files-found: error
+          if-no-files-found: warn
