@@ -79,8 +79,9 @@ jobs:
             sed -i 's|#include <firehose/tracepoint_private.h>|#include "fuxi_firehose_stub.h"|' "$f"
             sed -i '' 's|#include <firehose/chunk_private.h>||; s|#include <firehose/ioctl_private.h>||; s|#include <os/firehose_buffer_private.h>||; s|#include <os/firehose.h>||' "$f" 2>/dev/null || \
             sed -i 's|#include <firehose/chunk_private.h>||; s|#include <firehose/ioctl_private.h>||; s|#include <os/firehose_buffer_private.h>||; s|#include <os/firehose.h>||' "$f"
-            grep -n "fuxi_firehose_stub\|firehose" "$f" | head -8
-          done
+            grep -n "fuxi_firehose_stub" "$f" | head -5
+          echo "=== 树内 firehose_types_private.h 的完整定义（供参考）==="
+          sed -n '1,200p' libkern/firehose/firehose_types_private.h
       - name: 去掉 -Werror（Xcode 15 的 clang 比 xnu-8792 当年更严格）
         run: |
           exec > >(tee -a werror.log) 2>&1
@@ -90,7 +91,6 @@ jobs:
           grep -rl -- "-Werror" makedefs bsd iokit osfmk libkern 2>/dev/null | head -20 || true
           for f in $(grep -rl -- "-Werror" makedefs 2>/dev/null); do
             sed -i '' 's/-Werror//g' "$f" 2>/dev/null || sed -i 's/-Werror//g' "$f"
-          done
           echo "=== 处理后 ==="
           grep -rn -- "-Werror" makedefs 2>/dev/null | head -10 || echo "(已清空)"
       - name: 构建 XNU（arm64 RELEASE）
@@ -160,7 +160,6 @@ jobs:
             else
               echo "(没有该文件)"
             fi
-          done
 
       - uses: actions/upload-artifact@v4
         if: always()

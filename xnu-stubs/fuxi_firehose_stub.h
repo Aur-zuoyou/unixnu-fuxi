@@ -1,21 +1,23 @@
 /*
- * fuxi 用的 firehose 替身头文件
+ * fuxi 用的 firehose 替身头文件（第 2 版）
  *
  * 背景:
- *   XNU 的 libkern/os/log.c 与 bsd/kern/subr_log.c 依赖 Apple 内部的
- *   firehose 追踪基础设施，其头文件不在开源树里（也不在公开 SDK 里）:
+ *   XNU 的 libkern/os/log.c 与 bsd/kern/subr_log.c 依赖 Apple 内部头:
  *       <firehose/tracepoint_private.h>
  *       <firehose/chunk_private.h>
  *       <firehose/ioctl_private.h>
  *       <os/firehose_buffer_private.h>
+ *   这些不在开源树里，也不在公开 SDK 里。
  *
- * 做法:
- *   不去伪造整套私有接口，而是把它们"切断"：
- *   提供最小可编译的类型与空实现，让 XNU 能编过、能链接；
- *   日志相关功能退化为普通输出（后续由我们把 printf 接到帧显示）。
+ * 从编译错误得知: 树内已有 libkern/firehose/firehose_types_private.h，
+ * 它已经定义了 firehose_stream_t / tracepoint_code_t / namespace /
+ * firehose_tracepoint_id_u(含 ftid_value) 等。**不能重复定义**。
  *
- * 注意:
- *   这只是为了让内核能构建并启动，firehose 追踪功能不可用。
+ * 本文件只补真正缺失的部分:
+ *   - struct firehose_chunk_s 与 firehose_chunk_t（真实类型是指针）
+ *   - firehose_buffer_t / map_info / push_reply
+ *   - FIREHOSE_CHUNK_SIZE 等常量
+ *   - 若干函数（空实现，只为让内核能编过、能链接）
  */
 
 #ifndef __FUXI_FIREHOSE_STUB_H__
@@ -27,65 +29,50 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+/* 复用树内已有的类型定义（枚举、tracepoint id 等） */
+#include <firehose/firehose_types_private.h>
+
 __BEGIN_DECLS
 
-/* ---------------- 常量 ---------------- */
+/* ---------------- 常量（树内没有的） ---------------- */
 
+#ifndef FIREHOSE_CHUNK_SIZE
 #define FIREHOSE_CHUNK_SIZE                          0x40000     /* 256KB */
+#endif
+
+#ifndef FIREHOSE_BUFFER_KERNEL_DEFAULT_CHUNK_COUNT
 #define FIREHOSE_BUFFER_KERNEL_DEFAULT_CHUNK_COUNT   16
+#endif
+
+#ifndef FIREHOSE_BUFFER_KERNEL_DEFAULT_IO_PAGES
 #define FIREHOSE_BUFFER_KERNEL_DEFAULT_IO_PAGES      16
+#endif
+
+#ifndef FIREHOSE_BUFFER_KERNEL_CHUNK_COUNT
 #define FIREHOSE_BUFFER_KERNEL_CHUNK_COUNT           16
+#endif
 
-#define FIREHOSE_TRACEPOINT_PC_DYNAMIC_BIT           0x80000000u
-#define FIREHOSE_TRACE_ID_MAKE(ns, code)             (((uint32_t)(ns) << 24) | ((uint32_t)(code) & 0xffffff))
+/* ---------------- chunk（chunk_private.h 里的内容） ---------------- */
 
-/* ---------------- 基本类型 ---------------- */
-
-typedef uint8_t  firehose_stream_t;
-enum {
-	firehose_stream_persist  = 0,
-	firehose_stream_memory   = 1,
-	firehose_stream_metadata = 2,
-};
-
-typedef uint32_t firehose_tracepoint_code_t;
-enum {
-	firehose_tracepoint_code_invalid            = 0,
-	firehose_tracepoint_code_load_memory        = 1,
-	firehose_tracepoint_code_load_filesystem    = 2,
-	firehose_tracepoint_code_load_filesystem_ftab = 3,
-};
-
-typedef uint32_t firehose_tracepoint_namespace_t;
-enum {
-	firehose_tracepoint_namespace_log      = 1,
-	firehose_tracepoint_namespace_metadata = 2,
-};
-
-typedef uint16_t firehose_tracepoint_flags_t;
-typedef uint64_t firehose_tracepoint_id_t;
-
-typedef union {
-	uint64_t                 ftid;
-	firehose_tracepoint_id_t id;
-} firehose_tracepoint_id_u;
-
-typedef struct firehose_chunk_pos_s {
-	uint32_t        fcp_next_entry_offs;
-	uint32_t        fcp_private_offs;
-	uint32_t        fcp_refcnt;
+struct firehose_chunk_pos_s {
+	uint32_t          fcp_next_entry_offs;
+	uint32_t          fcp_private_offs;
+	uint32_t          fcp_refcnt;
 	firehose_stream_t fcp_stream;
-	uint32_t        fcp_flag_io;
-} firehose_chunk_pos_t;
+	uint32_t          fcp_flag_io;
+};
 
-typedef struct firehose_chunk_s {
-	firehose_chunk_pos_t  fc_pos;
-	uint8_t               fc_data[FIREHOSE_CHUNK_SIZE];
-} firehose_chunk_t;
+struct firehose_chunk_s {
+	struct firehose_chunk_pos_s  fc_pos;
+	uint8_t                      fc_data[FIREHOSE_CHUNK_SIZE];
+};
 
-/* 注意: XNU 里 firehose_chunk_t 被当成指针用（firehose_chunk_t func = &x） */
+/* 真实类型是指针（subr_log.c 里: firehose_chunk_t firehose_boot_chunk = &oslog_boot_buf） */
+typedef struct firehose_chunk_s *firehose_chunk_t;
 
-typedef struct firehose_buffer_s  *firehose_buffer_t;
+/* ---------------- 缓冲区（firehose_buffer_private.h 里的内容） ---------------- */
+
+typedef struct firehose_buffer_s *firehose_buffer_t;
 
 typedef struct {
 	mach_vm_address_t  addr;
@@ -98,14 +85,14 @@ typedef struct {
 } firehose_push_reply_t;
 
 typedef struct {
-	uint8_t   flags[16];
-} firehose_trace_uuid_info_s;
-
-typedef struct {
 	uint64_t  flags;
 } firehose_trace_metadata_t;
 
-/* ---------------- 函数 ---------------- */
+typedef struct {
+	uint8_t   flags[16];
+} firehose_trace_uuid_info_s;
+
+/* ---------------- 函数（空实现） ---------------- */
 
 static inline uint64_t
 firehose_tracepoint_time(firehose_tracepoint_flags_t flags __unused)
@@ -171,11 +158,6 @@ __firehose_kernel_configuration_valid(uint8_t chunks __unused, uint8_t pages __u
 	return true;
 }
 
-static inline void
-oslog_stream(bool kernel __unused, firehose_tracepoint_id_u ftid __unused,
-    uint64_t ts __unused, const void *buf __unused, size_t sz __unused)
-{
-}
-
 __END_DECLS
+
 #endif /* __FUXI_FIREHOSE_STUB_H__ */
