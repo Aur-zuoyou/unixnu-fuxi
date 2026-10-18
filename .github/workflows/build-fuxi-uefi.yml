@@ -149,12 +149,13 @@ jobs:
           echo "### 报错原文出自哪个文件"
           grep -rn "proper alignment" edk2-msm 2>/dev/null | head -10 || true
           echo
-          echo "### 该报错附近的代码(前后 30 行)"
-          f=$(grep -rl "proper alignment" edk2-msm 2>/dev/null | head -1)
-          if [ -n "$f" ]; then
-            n=$(grep -n "proper alignment" "$f" | head -1 | cut -d: -f1)
-            s=$((n-30)); [ $s -lt 1 ] && s=1
-            sed -n "${s},$((n+10))p" "$f"
+          echo "### DxeCore CoreTerminateMemoryMap 的完整逻辑"
+          pc=edk2-msm/Common/edk2/MdeModulePkg/Core/Dxe/Mem/Page.c
+          if [ -f "$pc" ]; then
+            n=$(grep -n "proper alignment" "$pc" | head -1 | cut -d: -f1)
+            s=$((n-70)); [ $s -lt 1 ] && s=1
+            echo "--- Page.c 第 $s 行到 $((n+15)) 行 ---"
+            sed -n "${s},$((n+15))p" "$pc"
           fi
           echo
           echo "### boot-fuxi.img 里找探针 GUID"
