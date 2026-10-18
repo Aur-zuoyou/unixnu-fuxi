@@ -85,6 +85,25 @@ jobs:
           find BUILD -maxdepth 4 -type f \( -name "kernel*" -o -name "*.t?" -o -name "mach*" \) 2>/dev/null | head -40
           ls -lh BUILD/obj/RELEASE_ARM64/ 2>/dev/null || true
 
+      - name: 诊断缺失的 firehose 头文件
+        if: always()
+        run: |
+          exec > >(tee -a firehose.log) 2>&1
+          set -x
+          cd xnu
+          echo "=== log.c 里用到的 firehose 相关标识 ==="
+          grep -n -i "firehose\|os_log" libkern/os/log.c | head -40 || true
+          echo "=== subr_log.c 里用到的 ==="
+          grep -n -i "firehose" bsd/kern/subr_log.c | head -40 || true
+          echo "=== EXTERNAL_HEADERS/os 目录内容 ==="
+          ls EXTERNAL_HEADERS/os/ 2>/dev/null | head -30 || echo "(无此目录)"
+          echo "=== 树里有没有 firehose 相关文件 ==="
+          find . -iname "*firehose*" 2>/dev/null | head -10 || true
+          echo "=== SDK 里有没有 ==="
+          SDK=$(xcrun --sdk macosx --show-sdk-path || true)
+          find "$SDK" -iname "*firehose*" 2>/dev/null | head -10 || echo "(SDK 里没有)"
+          echo "=== 头文件搜索路径（看 XNU 期望从哪拿）==="
+          grep -rn "EXTERNAL_HEADERS" makedefs/MakeInc.cmd | head -10 || true
       - name: 打包产物
         if: always()
         run: |
@@ -122,6 +141,7 @@ jobs:
             build.log
             pack.log
             werror.log
+            firehose.log
             summary.txt
             out/xnu-build-artifacts.tar.bz2
           if-no-files-found: warn
