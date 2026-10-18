@@ -86,17 +86,15 @@ jobs:
           # RUNTIME_PAGE_ALLOCATION_GRANULARITY 对齐（EFI 允许 4K 或 64K）。
           # 实测我们所有 runtime 区都是 4K 对齐，但固件按更大粒度校验，导致退出失败。
           # 这是纯 sanity check，不改变实际内存布局，改宏即可。
-          echo "### 宏定义位置"
-          grep -rn "define RUNTIME_PAGE_ALLOCATION_GRANULARITY" edk2-msm/Common/edk2 2>/dev/null | head -5 || true
-          echo "### 改之前的值"
-          grep -rn "RUNTIME_PAGE_ALLOCATION_GRANULARITY" edk2-msm/Common/edk2/MdeModulePkg/Core/Dxe 2>/dev/null | head -10 || true
-          for f in $(grep -rl "define RUNTIME_PAGE_ALLOCATION_GRANULARITY" edk2-msm/Common/edk2 2>/dev/null); do
-            sed -i 's/#define RUNTIME_PAGE_ALLOCATION_GRANULARITY.*/#define RUNTIME_PAGE_ALLOCATION_GRANULARITY 1/' "$f"
+          # 宏定义处可能是 "#define  NAME"（多个空格），所以用正则匹配
+          FILES=$(grep -rlE "define[[:space:]]+RUNTIME_PAGE_ALLOCATION_GRANULARITY" edk2-msm/Common/edk2 2>/dev/null || true)
+          echo "命中文件: ${FILES:-（无）}"
+          for f in $FILES; do
+            sed -i -E 's/^([[:space:]]*)#define[[:space:]]+RUNTIME_PAGE_ALLOCATION_GRANULARITY.*/\1#define RUNTIME_PAGE_ALLOCATION_GRANULARITY 1/' "$f"
             echo "patched: $f"
           done
-          echo "### 改之后"
-          grep -rn "define RUNTIME_PAGE_ALLOCATION_GRANULARITY" edk2-msm/Common/edk2 2>/dev/null | head -5 || true
-          echo "### 所有引用该宏的位置"
+          echo "--- 打完补丁后 ---"
+          grep -rnE "define[[:space:]]+RUNTIME_PAGE_ALLOCATION_GRANULARITY" edk2-msm/Common/edk2 2>/dev/null | head -5 || echo "（仍未找到定义）"
           grep -rn "RUNTIME_PAGE_ALLOCATION_GRANULARITY" edk2-msm/Common/edk2 2>/dev/null | head -20 || true
       - name: 编 fuxi UEFI
         run: |
@@ -176,6 +174,11 @@ jobs:
             echo "--- Page.c 第 $s 行到 $((n+15)) 行 ---"
             sed -n "${s},$((n+15))p" "$pc"
           fi
+          echo
+          echo
+          echo "### RUNTIME_PAGE_ALLOCATION_GRANULARITY 的定义与引用"
+          grep -rnE "define[[:space:]]+RUNTIME_PAGE_ALLOCATION_GRANULARITY" edk2-msm/Common/edk2 2>/dev/null | head -5 || echo "（没有定义，可能来自 PCD 或头文件）"
+          grep -rn "RUNTIME_PAGE_ALLOCATION_GRANULARITY" edk2-msm/Common/edk2 2>/dev/null | head -15 || true
           echo
           echo "### boot-fuxi.img 里找探针 GUID"
           python3 tools/find_probe.py edk2-msm/boot-fuxi.img || true
