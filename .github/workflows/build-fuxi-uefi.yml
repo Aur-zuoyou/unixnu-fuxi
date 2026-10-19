@@ -123,8 +123,16 @@ jobs:
           echo "kernel: [$KERNEL]"
           if [ -z "$KERNEL" ]; then echo "产物里没有内核文件"; cp xnu-payload.log ../xnu-payload.log; exit 0; fi
 
-          echo "=== 生成 Apple 设备树 ==="
-          python3 tools/mkadt_fuxi.py rom/xnu/fuxi.adt || echo "mkadt 失败"
+          echo "=== 准备 Apple 设备树 ==="
+          if [ -f rom/xnu/kalama.adt ]; then
+            echo "用 kalama.adt 生成 fuxi 版（改节点名 + dram 锚点）"
+            python3 tools/adt_fix_fuxi.py rom/xnu/kalama.adt rom/xnu/fuxi.adt || echo "adt_fix 失败"
+          elif [ -f rom/xnu/fuxi.adt ]; then
+            echo "用仓库里的 fuxi.adt"
+          else
+            echo "没有 ADT 源，现场生成"
+            python3 tools/mkadt_fuxi.py rom/xnu/fuxi.adt || echo "mkadt 失败"
+          fi
           ls -l rom/xnu/fuxi.adt
 
           echo "=== 生成 payload ==="
