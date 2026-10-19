@@ -14,6 +14,7 @@
   Probe.c
   XnuBoot.c
   XnuLoad.c
+  XnuFv.c
   XnuUfs.c
   xnu_jump.S
   xnu_payload.S
@@ -24,6 +25,7 @@
   MdePkg/MdePkg.dec
 
 [Protocols]
+  gEfiFirmwareVolume2ProtocolGuid
   gEfiBlockIoProtocolGuid
   gEfiGraphicsOutputProtocolGuid
   gEfiSimpleTextOutProtocolGuid

@@ -149,7 +149,7 @@ jobs:
           probe=edk2-msm/Platform/Xiaomi/sm8550/probe
           mkdir -p "$probe"
           cp loader/Probe.c loader/Probe.inf \
-             loader/XnuBoot.c loader/XnuLoad.c loader/XnuUfs.c loader/xnu_jump.S loader/xnu_payload.S "$probe"/
+             loader/XnuBoot.c loader/XnuLoad.c loader/XnuFv.c loader/XnuUfs.c loader/xnu_jump.S loader/xnu_payload.S "$probe"/
           # 把真机导出的设备树编进驱动：这版固件不把 DT 放进 EFI 配置表，
           # 所以内核启动时只能靠我们自带的一份。
           python3 tools/gen_dtb_blob.py rom/device/fuxi_runtime.dtb "$probe/fuxi_dtb.c"
@@ -173,6 +173,21 @@ jobs:
           # ② FDF: sm8550.fdf 不使用 DEVICE_DXE_FV_COMPONENTS, 必须直接插进 [FV.FvMain]
           sed -i '/INF MdeModulePkg\/Universal\/BdsDxe\/BdsDxe.inf/a\  INF Platform/Xiaomi/sm8550/probe/Probe.inf' \
             edk2-msm/Platform/Qualcomm/sm8550/sm8550.fdf
+
+          echo "=== 把 XNU payload 作为 RAW section 塞进 FV ==="
+          if [ -f rom/xnu/payload-blob.img ]; then
+            cp rom/xnu/payload-blob.img edk2-msm/Platform/Xiaomi/sm8550/probe/xnu_payload.bin
+            ls -l edk2-msm/Platform/Xiaomi/sm8550/probe/xnu_payload.bin
+            if ! grep -q "XNU PAYLOAD" edk2-msm/Platform/Qualcomm/sm8550/sm8550.fdf; then
+              sed -i "/INF Platform\/Xiaomi\/sm8550\/probe\/Probe.inf/a\\
+  FILE FREEFORM = 9f3c7a21-5b4e-4c8d-9a11-7e2b6308d451 {   # XNU PAYLOAD\n    SECTION RAW = Platform/Xiaomi/sm8550/probe/xnu_payload.bin\n  }" \
+                edk2-msm/Platform/Qualcomm/sm8550/sm8550.fdf
+              echo "已插入 FV RAW section"
+            fi
+            grep -n -A3 "XNU PAYLOAD" edk2-msm/Platform/Qualcomm/sm8550/sm8550.fdf || true
+          else
+            echo "没有 payload-blob.img，跳过 FV 注入"
+          fi
           echo "--- 确认 FDF(探针) ---"
           grep -n "probe/Probe.inf" edk2-msm/Platform/Qualcomm/sm8550/sm8550.fdf
 
