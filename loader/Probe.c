@@ -61,6 +61,7 @@ XnuScreenLog (
   Line[N] = 0;
 
   DrawString (20, mLogY, Line, 0xFFFFFFFF);
+  SweepFb ();
   mLogY += 24;
 }
 
@@ -364,6 +365,7 @@ Fill (
   for (i = 0; i < Count; i++) {
     Pix[i] = Color;
   }
+  SweepFb ();
 }
 
 STATIC __attribute__((unused))
