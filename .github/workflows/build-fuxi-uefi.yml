@@ -129,7 +129,8 @@ jobs:
           # 所以把探针编进固件, 由 BDS 自动加载, 不需要任何按键。
           probe=edk2-msm/Platform/Xiaomi/sm8550/probe
           mkdir -p "$probe"
-          cp loader/Probe.c loader/Probe.inf "$probe"/
+          cp loader/Probe.c loader/Probe.inf \
+             loader/XnuBoot.c loader/xnu_jump.S loader/xnu_payload.S "$probe"/
           # 把真机导出的设备树编进驱动：这版固件不把 DT 放进 EFI 配置表，
           # 所以内核启动时只能靠我们自带的一份。
           python3 tools/gen_dtb_blob.py rom/device/fuxi_runtime.dtb "$probe/fuxi_dtb.c"
