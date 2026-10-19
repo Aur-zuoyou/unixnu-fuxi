@@ -20,7 +20,7 @@ on:
   workflow_dispatch:
 
 env:
-  PAYLOAD_ENABLED: "off"   # 诊断: off=不嵌 XNU
+  PAYLOAD_ENABLED: "on"   # 诊断: off=不嵌 XNU
 
 permissions:
   contents: read
@@ -129,19 +129,11 @@ jobs:
           ls -l rom/xnu/payload.bin
 
           if [ -f rom/xnu/payload.bin ]; then
-            echo "=== 生成 .incbin 汇编 ==="
-            {
-              echo '.section .rodata'
-              echo '.global gXnuPayload'
-              echo '.global gXnuPayloadEnd'
-              echo '.align 12'
-              echo 'gXnuPayload:'
-              echo ".incbin \"$PWD/rom/xnu/payload.bin\""
-              echo 'gXnuPayloadEnd:'
-            } > loader/xnu_payload.S
-            cat loader/xnu_payload.S
+            echo "=== 生成可刷进 dtbo 的镜像（不嵌进 EFI）==="
+            python3 tools/mkpayload_img.py rom/xnu/payload.bin rom/xnu/payload-blob.img
+            ls -l rom/xnu/payload-blob.img
           else
-            echo "没有 payload.bin，保持占位 .S（固件里不带 XNU）"
+            echo "没有 payload.bin"
           fi
 
           cp xnu-payload.log ../xnu-payload.log
@@ -157,7 +149,7 @@ jobs:
           probe=edk2-msm/Platform/Xiaomi/sm8550/probe
           mkdir -p "$probe"
           cp loader/Probe.c loader/Probe.inf \
-             loader/XnuBoot.c loader/xnu_jump.S loader/xnu_payload.S "$probe"/
+             loader/XnuBoot.c loader/XnuLoad.c loader/xnu_jump.S loader/xnu_payload.S "$probe"/
           # 把真机导出的设备树编进驱动：这版固件不把 DT 放进 EFI 配置表，
           # 所以内核启动时只能靠我们自带的一份。
           python3 tools/gen_dtb_blob.py rom/device/fuxi_runtime.dtb "$probe/fuxi_dtb.c"
@@ -332,6 +324,7 @@ jobs:
             edk2-msm/diag.txt
             edk2-msm/version.txt
             build.log
+            rom/xnu/payload-blob.img
             probe.dis
             Probe.efi
             xnu-payload.log

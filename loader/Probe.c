@@ -27,6 +27,7 @@
 
 extern UINTN        XnuPayloadSize (VOID);
 extern CONST VOID  *XnuPayloadAddr (VOID);
+extern EFI_STATUS   XnuLoadFromBlock (VOID **Buf, UINTN *Size);
 extern VOID         XnuBootRun (CONST VOID *, UINTN, UINTN, UINTN, UINT32, UINT32,
                                 VOID (*)(CONST CHAR8 *, UINT64));
 
@@ -83,6 +84,8 @@ STATIC UINTN       mMemSize;
 STATIC UINT32      mFdtFound;
 STATIC UINTN       mCfgCount;
 STATIC UINTN       mMapBufSize;
+STATIC VOID       *mXnuBuf;
+STATIC UINTN       mXnuBufSize;
 
 /* ---------------- 8x8 鐐归樀瀛椾綋 ---------------- */
 
@@ -783,6 +786,18 @@ OnTextOut (
          然后 CoreTerminateMemoryMap(MapKey) 校验失败, 返回 EFI_INVALID_PARAMETER。
        第二次调用时回调不会重复执行, 所以再取一次 key 就能成功。
        循环内不做任何打印/分配, 避免自己又把 key 弄失效。            */
+    /* 先试着从块设备（dtbo 分区）把 XNU payload 读进内存：EBS 之后协议就没了 */
+    if (XnuPayloadSize () == 0) {
+      if (!EFI_ERROR (XnuLoadFromBlock (&mXnuBuf, &mXnuBufSize))) {
+        if (mXnuBufSize > 0) {
+          Fill (0xFF001800);
+          mLogY = 40;
+          XnuScreenLog ("BLOCK PAYLOAD", mXnuBufSize);
+          XnuScreenLog ("EMBEDDED", XnuPayloadSize ());
+        }
+      }
+    }
+
     /* 标记: 已经准备调用 ExitBootServices（画在屏幕上，和 EBS 之后的日志区分开） */
     if (XnuPayloadSize () > 0) {
       Fill (0xFF1A0000);
@@ -846,11 +861,12 @@ OnTextOut (
       }
     } else {
       /* 退出成功: 优先启动内嵌的 XNU payload；没有 payload 时退回 M5 自测内核 */
-      if (XnuPayloadSize () > 0) {
+      if (mXnuBufSize > 0 || XnuPayloadSize () > 0) {
         Fill (0xFF000000);
         mLogY = 40;
-        XnuScreenLog ("EBS OK", XnuPayloadSize ());
-        XnuBootRun (XnuPayloadAddr (), XnuPayloadSize (),
+        XnuScreenLog ("EBS OK", (mXnuBufSize > 0) ? mXnuBufSize : XnuPayloadSize ());
+        XnuBootRun ((mXnuBufSize > 0) ? mXnuBuf : XnuPayloadAddr (),
+                    (mXnuBufSize > 0) ? mXnuBufSize : XnuPayloadSize (),
                     (UINTN) mFb, (UINTN) mFbPitch, mFbW, mFbH, XnuScreenLog);
         XnuScreenLog ("RETURNED", 0);
       }

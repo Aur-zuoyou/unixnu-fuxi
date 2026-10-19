@@ -13,6 +13,7 @@
 [Sources]
   Probe.c
   XnuBoot.c
+  XnuLoad.c
   xnu_jump.S
   xnu_payload.S
   fuxi_dtb.c
@@ -22,6 +23,7 @@
   MdePkg/MdePkg.dec
 
 [Protocols]
+  gEfiBlockIoProtocolGuid
   gEfiGraphicsOutputProtocolGuid
   gEfiSimpleTextOutProtocolGuid
 
