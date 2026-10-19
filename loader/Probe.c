@@ -900,10 +900,9 @@ OnTextOut (
       /* 退出成功: 优先启动 XNU payload；找不到就停在诊断画面（不退回 M5，
          否则 M5 会 Fill 整屏把我们上面的诊断信息擦掉） */
       if (mXnuBufSize > 0 || XnuPayloadSize () > 0) {
-        /* 接管 MMU：自己建恒等映射（4K 粒度 + 1GB 块） */
-        XnuScreenLog ("MMU BEFORE", 0);
-        XnuMmuInstall (0, 0);
-        XnuScreenLog ("MMU AFTER", 0);
+        /* 不接管 MMU：AllocatePages 给的内存本来就在 4GB 以下，
+           UEFI 已经映射好，直接用最稳（接管 TTBR0 会把 UEFI 自己的属性搞乱） */
+        XnuScreenLog ("MMU SKIPPED", 0);
         Fill (0xFF000000);
         mLogY = 40;
         XnuScreenLog ("EBS OK", (mXnuBufSize > 0) ? mXnuBufSize : XnuPayloadSize ());
