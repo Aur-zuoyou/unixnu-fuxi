@@ -222,6 +222,35 @@ jobs:
           ls SETUP/config/ 2>/dev/null | head -10 || true
           grep -n "optional" SETUP/config/mkglue.c 2>/dev/null | head -5 || true
 
+      - name: 排查 tunables.s / assym.s 的生成方式
+        if: always()
+        run: |
+          exec > >(tee -a genfiles.log) 2>&1
+          cd xnu
+          OBJ=BUILD/obj/RELEASE_ARM64_VMAPPLE
+
+          echo "=== 1. tunables 目录内容 ==="
+          ls -la osfmk/arm64/tunables/ 2>/dev/null || echo "(没有该目录)"
+
+          echo "=== 2. 谁提到 tunables.s ==="
+          grep -rn "tunables\.s" makedefs osfmk/conf SETUP 2>/dev/null | head -20 || true
+
+          echo "=== 3. 谁提到 tunables（脚本/规则）==="
+          grep -rln "tunables" SETUP makedefs 2>/dev/null | head -10 || true
+
+          echo "=== 4. 构建目录里已生成的东西 ==="
+          ls -la "$OBJ/osfmk/RELEASE/" 2>/dev/null | head -30 || echo "(无)"
+          echo "--- 找 assym.s / tunables.s ---"
+          find BUILD -name "assym.s" 2>/dev/null | head -5
+          find BUILD -name "tunables*.s" 2>/dev/null | head -5
+
+          echo "=== 5. 树里所有 tunables 相关文件 ==="
+          find . -name "*tunables*" -not -path "./BUILD/*" 2>/dev/null | head -20
+
+          echo "=== 6. Makefile 里 start.o 的依赖与命令 ==="
+          grep -n -B2 -A8 "start.s" "$OBJ/osfmk/RELEASE/Makefile" 2>/dev/null | head -40 || true
+
+
       - name: 打包产物
         if: always()
         run: |
@@ -262,6 +291,7 @@ jobs:
             build.log
             pack.log
             startup.log
+            genfiles.log
             asflags.log
             startfix.log
             aleph.log
