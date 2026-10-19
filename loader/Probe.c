@@ -89,7 +89,7 @@ STATIC UINTN       mMapBufSize;
 
 /* ---------------- 8x8 鐐归樀瀛椾綋 ---------------- */
 
-STATIC CONST CHAR8  CHARSET[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ :-=.()x/abcdefghijklmnopqrstuvwyz!?_,"'+*[]";
+STATIC CONST CHAR8  CHARSET[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ :-=.()x/abcdefghijklmnopqrstuvwyz!?_,";
 
 STATIC CONST UINT8  FONT[][8] = {
   { 0x3C,0x66,0x6E,0x76,0x66,0x66,0x3C,0x00 }, /* 0 */
