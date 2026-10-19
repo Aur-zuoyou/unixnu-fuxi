@@ -178,12 +178,10 @@ jobs:
           if [ -f rom/xnu/payload-blob.img ]; then
             cp rom/xnu/payload-blob.img edk2-msm/Platform/Xiaomi/sm8550/probe/xnu_payload.bin
             ls -l edk2-msm/Platform/Xiaomi/sm8550/probe/xnu_payload.bin
-            if ! grep -q "XNU PAYLOAD" edk2-msm/Platform/Qualcomm/sm8550/sm8550.fdf; then
-              sed -i "/INF Platform\/Xiaomi\/sm8550\/probe\/Probe.inf/a\\
-  FILE FREEFORM = 9f3c7a21-5b4e-4c8d-9a11-7e2b6308d451 {   # XNU PAYLOAD\n    SECTION RAW = Platform/Xiaomi/sm8550/probe/xnu_payload.bin\n  }" \
-                edk2-msm/Platform/Qualcomm/sm8550/sm8550.fdf
-              echo "已插入 FV RAW section"
-            fi
+            python3 tools/add_fv_payload.py \
+              edk2-msm/Platform/Qualcomm/sm8550/sm8550.fdf \
+              Platform/Xiaomi/sm8550/probe/xnu_payload.bin
+            echo "--- 确认 FDF ---"
             grep -n -A3 "XNU PAYLOAD" edk2-msm/Platform/Qualcomm/sm8550/sm8550.fdf || true
           else
             echo "没有 payload-blob.img，跳过 FV 注入"
