@@ -858,7 +858,8 @@ OnTextOut (
         }
       }
     } else {
-      /* 退出成功: 优先启动内嵌的 XNU payload；没有 payload 时退回 M5 自测内核 */
+      /* 退出成功: 优先启动 XNU payload；找不到就停在诊断画面（不退回 M5，
+         否则 M5 会 Fill 整屏把我们上面的诊断信息擦掉） */
       if (mXnuBufSize > 0 || XnuPayloadSize () > 0) {
         Fill (0xFF000000);
         mLogY = 40;
@@ -868,6 +869,14 @@ OnTextOut (
                     (UINTN) mFb, (UINTN) mFbPitch, mFbW, mFbH, XnuScreenLog);
         XnuScreenLog ("RETURNED", 0);
       }
+      if (mXnuBufSize == 0 && XnuPayloadSize () == 0) {
+        /* 没有任何 payload：把诊断留在屏幕上，死循环等用户看 */
+        XnuScreenLog ("NO PAYLOAD", 0);
+        for (;;) {
+          CpuDeadLoop ();
+        }
+      }
+
       if (mKernelStack != 0 && mKernelEntry != 0) {
         BuildBootArgs (mFdtAddr, mFdtSize, mMemSize);
         JumpToBootArgs (mKernelEntry, (UINTN) &gBootArgs, mKernelStack);
