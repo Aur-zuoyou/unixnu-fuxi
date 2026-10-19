@@ -18,11 +18,9 @@ diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 +	dsb	sy
  
  	b		common_start
-@@ -459,5 +459,16 @@
- 	// Unlock the core for debugging
- 	msr		OSLAR_EL1, xzr
- 	msr		DAIFSet, #(DAIFSC_ALL)				// Disable all interrupts
-+	/* fuxi: 进入 start_first_cpu */
+@@ -457,3 +457,14 @@
+ LEXT(start_first_cpu)
++	/* fuxi: 进入 start_first_cpu（OSLAR 之前） */
 +	MOV64	x9, 0xB0000000
 +	MOV64	x12, 0x20F580
 +	add	x9, x9, x12
@@ -34,4 +32,4 @@ diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 +		b.ne	1b
 +	dsb	sy
  
- 	mov		x20, x0
+ 	// Unlock the core for debugging
