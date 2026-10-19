@@ -27,7 +27,8 @@
 
 extern UINTN        XnuPayloadSize (VOID);
 extern CONST VOID  *XnuPayloadAddr (VOID);
-extern EFI_STATUS   XnuLoadFromBlock (VOID **Buf, UINTN *Size);
+extern EFI_STATUS   XnuLoadFromBlock (VOID **Buf, UINTN *Size,
+                                      VOID (*Log)(CONST CHAR8 *, UINT64));
 extern VOID         XnuBootRun (CONST VOID *, UINTN, UINTN, UINTN, UINT32, UINT32,
                                 VOID (*)(CONST CHAR8 *, UINT64));
 
@@ -788,14 +789,11 @@ OnTextOut (
        循环内不做任何打印/分配, 避免自己又把 key 弄失效。            */
     /* 先试着从块设备（dtbo 分区）把 XNU payload 读进内存：EBS 之后协议就没了 */
     if (XnuPayloadSize () == 0) {
-      if (!EFI_ERROR (XnuLoadFromBlock (&mXnuBuf, &mXnuBufSize))) {
-        if (mXnuBufSize > 0) {
-          Fill (0xFF001800);
-          mLogY = 40;
-          XnuScreenLog ("BLOCK PAYLOAD", mXnuBufSize);
-          XnuScreenLog ("EMBEDDED", XnuPayloadSize ());
-        }
-      }
+      Fill (0xFF001800);
+      mLogY = 40;
+      XnuScreenLog ("EMBEDDED", XnuPayloadSize ());
+      XnuLoadFromBlock (&mXnuBuf, &mXnuBufSize, XnuScreenLog);
+      XnuScreenLog ("BUF SIZE", mXnuBufSize);
     }
 
     /* 标记: 已经准备调用 ExitBootServices（画在屏幕上，和 EBS 之后的日志区分开） */

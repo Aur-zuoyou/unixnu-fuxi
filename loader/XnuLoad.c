@@ -48,10 +48,13 @@ MagicOk (
   @retval EFI_SUCCESS  找到并读成功
   @retval others       没找到
 **/
+typedef VOID (*XNU_LOG_FN)(CONST CHAR8 *Tag, UINT64 Value);
+
 EFI_STATUS
 XnuLoadFromBlock (
-  OUT VOID   **Buf,
-  OUT UINTN  *Size
+  OUT VOID       **Buf,
+  OUT UINTN      *Size,
+  IN  XNU_LOG_FN  Log
   )
 {
   EFI_STATUS             Status;
@@ -81,6 +84,10 @@ XnuLoadFromBlock (
     return Status;
   }
 
+  if (Log != NULL) {
+    Log ("BLK HANDLES", (UINT64)Count);
+  }
+
   for (I = 0; I < Count; I++) {
     Bio = NULL;
     if (EFI_ERROR (gBS->HandleProtocol (Handles[I], &gEfiBlockIoProtocolGuid, (VOID **)&Bio))) {
@@ -95,6 +102,11 @@ XnuLoadFromBlock (
 
     BlkSize   = Bio->Media->BlockSize;
     MediaSize = (UINTN)((Bio->Media->LastBlock + 1) * BlkSize);
+
+    if ((Log != NULL) && (I < 6)) {
+      Log ("BLK SIZE", (UINT64)MediaSize);
+    }
+
     if ((MediaSize < PAYLOAD_MIN_MEDIA) || (MediaSize > PAYLOAD_MAX_MEDIA)) {
       continue;
     }
@@ -116,9 +128,23 @@ XnuLoadFromBlock (
       continue;
     }
 
-    Data = AllocatePool ((UINTN)Len);
-    if (Data == NULL) {
-      continue;
+    {
+      EFI_PHYSICAL_ADDRESS  Pages;
+
+      Pages = 0;
+      Status = gBS->AllocatePages (
+                      AllocateAnyPages,
+                      EfiLoaderData,
+                      (UINTN)((Len + EFI_PAGE_SIZE - 1) / EFI_PAGE_SIZE),
+                      &Pages
+                      );
+      if (EFI_ERROR (Status)) {
+        if (Log != NULL) {
+          Log ("ALLOC FAIL", (UINT64)Len);
+        }
+        continue;
+      }
+      Data = (UINT8 *)(UINTN)Pages;
     }
 
     /* 从偏移 16 开始按块读 */
@@ -149,6 +175,9 @@ XnuLoadFromBlock (
     }
 
     if (Off == (UINTN)Len) {
+      if (Log != NULL) {
+        Log ("BLK FOUND", (UINT64)Len);
+      }
       *Buf  = Data;
       *Size = (UINTN)Len;
       FreePool (Handles);
@@ -160,6 +189,9 @@ XnuLoadFromBlock (
 
   if (Handles != NULL) {
     FreePool (Handles);
+  }
+  if (Log != NULL) {
+    Log ("BLK NOTFOUND", 0);
   }
   return EFI_NOT_FOUND;
 }
