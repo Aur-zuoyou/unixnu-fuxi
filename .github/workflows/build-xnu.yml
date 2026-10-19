@@ -180,7 +180,8 @@ jobs:
           echo "=== 建一个空的 tunables.s ==="
           mkdir -p osfmk/arm64/tunables
           if [ ! -f osfmk/arm64/tunables/tunables.s ]; then
-            printf "/* fuxi: placeholder for Apple private tunables. Empty on purpose. */\n" > osfmk/arm64/tunables/tunables.s
+            printf "/* fuxi: placeholder for Apple private tunables */\n" > osfmk/arm64/tunables/tunables.s
+            printf ".macro APPLY_TUNABLES\n.endm\n" >> osfmk/arm64/tunables/tunables.s
           fi
           ls -l osfmk/arm64/tunables/tunables.s
           cat osfmk/arm64/tunables/tunables.s
@@ -209,8 +210,15 @@ jobs:
           done
           echo "INCS=$INCS"
           mkdir -p "$OBJ/osfmk/arm64"
-          clang -c -o "$OBJ/osfmk/arm64/start.o" osfmk/arm64/start.s $INCS \
-            -DARM64=1 -DKERNEL=1 -DPRIVATE=1 -DXNU_TARGET_OS_OSX=1 2>&1 | head -30 || true
+          SFLAGS_FILE="$OBJ/osfmk/RELEASE/.SFLAGS"
+          if [ -f "$SFLAGS_FILE" ]; then
+            echo "=== .SFLAGS 前 20 行 ==="
+            head -20 "$SFLAGS_FILE"
+            SFLAGS="$(cat "$SFLAGS_FILE")"
+          else
+            SFLAGS="-DARM64=1 -DKERNEL=1 -DPRIVATE=1 -DXNU_TARGET_OS_OSX=1"
+          fi
+          clang -c -o "$OBJ/osfmk/arm64/start.o" osfmk/arm64/start.s $INCS $SFLAGS 2>&1 | head -30 || true
           ls -l "$OBJ/osfmk/arm64/start.o" 2>/dev/null || echo "start.o 仍未生成"
           nm "$OBJ/osfmk/arm64/start.o" 2>/dev/null | grep -i __start | head -3 || true
 
