@@ -19,6 +19,7 @@
 
 #include <Uefi.h>
 #include <Library/BaseLib.h>
+#include <Library/BaseMemoryLib.h>   /* CopyMem */
 
 #define PAYLOAD_MAGIC      "FUXIXNU"
 #define BOOT_LINE_LENGTH   608
