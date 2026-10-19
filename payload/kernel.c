@@ -19,7 +19,7 @@ typedef unsigned long      u64;
 /* ---------------- 8x8 点阵字体（只收需要的字符） ---------------- */
 
 /* 74 个字符，与下面 FONT 的 74 行一一对应；改这里必须同步改 FONT */
-static const char CHARSET[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ :-=.()x/abcdefghijklmnopqrstuvwyz!?_";
+static const char CHARSET[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ :-=.()x/xabcdefghijklmnopqrstuvwyz!?_";
 
 static const u8 FONT[][8] = {
   { 0x3C,0x66,0x6E,0x76,0x66,0x66,0x3C,0x00 },
