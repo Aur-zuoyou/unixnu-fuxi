@@ -28,6 +28,8 @@
 #define PAGE_16K           0x4000ULL
 
 /* payload 由 CI 生成的 xnu_payload.S 以 .incbin 方式嵌入 */
+typedef VOID (*XNU_LOG_FN)(CONST CHAR8 *Tag, UINT64 Value);
+
 extern CONST UINT8  gXnuPayload[];
 extern CONST UINT8  gXnuPayloadEnd[];
 
@@ -163,7 +165,8 @@ XnuBootRun (
   IN UINTN       FbBase,
   IN UINTN       FbPitch,
   IN UINT32      FbWidth,
-  IN UINT32      FbHeight
+  IN UINT32      FbHeight,
+  IN XNU_LOG_FN  Log
   )
 {
   CONST UINT8    *P = (CONST UINT8 *)Payload;
@@ -183,7 +186,14 @@ XnuBootRun (
   UINTN          I;
   XNU_BOOT_ARGS  *Ba;
 
+  if (Log != NULL) {
+    Log ("PAYLEN", (UINT64)PayloadLen);
+  }
+
   if ((Payload == NULL) || (PayloadLen < PAYLOAD_SEGTAB) || !MagicOk ((CONST CHAR8 *)P)) {
+    if (Log != NULL) {
+      Log ("BAD MAGIC", 0);
+    }
     return;
   }
 
@@ -196,6 +206,15 @@ XnuBootRun (
   PhysBase  = Hdr[5];
   MemSize   = Hdr[6];
   PaOfVa    = PhysBase - VirtBase;
+
+  if (Log != NULL) {
+    Log ("VIRTBASE", VirtBase);
+    Log ("PHYSBASE", PhysBase);
+    Log ("KEND", KernelEnd);
+    Log ("ADTSIZE", AdtSize);
+    Log ("ENTRY", EntryVa);
+    Log ("NSEGS", NSegs);
+  }
 
   /* 1. 各段拷到 phys_base + (vmaddr - virt_base) */
   {
@@ -211,6 +230,10 @@ XnuBootRun (
     }
   }
 
+  if (Log != NULL) {
+    Log ("SEGS DONE", 0);
+  }
+
   /* 2. ADT 放内核末尾，boot_args 放 ADT 之后（16K 对齐） */
   AdtPa = KernelEnd + PaOfVa;
   Copy64 ((UINTN)AdtPa, (UINTN)(P + AdtOff), (UINTN)AdtSize);
@@ -218,6 +241,10 @@ XnuBootRun (
   BaPa = (AdtPa + AdtSize + PAGE_16K - 1) & ~(PAGE_16K - 1);
   Top  = BaPa + PAGE_16K;
   Zero64 ((UINTN)BaPa, PAGE_16K);
+
+  if (Log != NULL) {
+    Log ("ADT DONE", AdtPa);
+  }
 
   /* 3. 填 boot_args */
   Ba                    = (XNU_BOOT_ARGS *)(UINTN)BaPa;
@@ -240,6 +267,10 @@ XnuBootRun (
 
   CopyMem (Ba->CommandLine, P + PAYLOAD_CMDLINE, BOOT_LINE_LENGTH);
   Ba->CommandLine[BOOT_LINE_LENGTH - 1] = 0;
+
+  if (Log != NULL) {
+    Log ("BOOTARGS", BaPa);
+  }
 
   /* 4. 按范围清 D-cache，然后关 MMU/缓存并跳 __start（x0 = boot_args） */
   AsmXnuDcacheCleanRange ((UINTN)PhysBase, (UINTN)(KernelEnd + PaOfVa));

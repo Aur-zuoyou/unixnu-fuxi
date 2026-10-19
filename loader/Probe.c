@@ -27,7 +27,38 @@
 
 extern UINTN        XnuPayloadSize (VOID);
 extern CONST VOID  *XnuPayloadAddr (VOID);
-extern VOID         XnuBootRun (CONST VOID *, UINTN, UINTN, UINTN, UINT32, UINT32);
+extern VOID         XnuBootRun (CONST VOID *, UINTN, UINTN, UINTN, UINT32, UINT32,
+                                VOID (*)(CONST CHAR8 *, UINT64));
+
+
+/* EBS 之后 ConOut 已经没了，日志用自己的点阵字体画到屏幕 */
+STATIC UINT32  mLogY;
+
+STATIC VOID
+XnuScreenLog (
+  IN CONST CHAR8  *Tag,
+  IN UINT64        Value
+  )
+{
+  CHAR8  Line[40];
+  UINTN  I;
+  UINTN  N;
+
+  for (N = 0; Tag[N] != 0 && N < 20; N++) {
+    Line[N] = Tag[N];
+  }
+  Line[N++] = '=';
+  for (I = 0; I < 16; I++) {
+    UINTN  Shift = (15 - I) * 4;
+    UINTN  D     = (UINTN)((Value >> Shift) & 0xF);
+
+    Line[N++] = (CHAR8)((D < 10) ? ('0' + D) : ('A' + D - 10));
+  }
+  Line[N] = 0;
+
+  DrawString (20, mLogY, Line, 0xFFFFFFFF);
+  mLogY += 24;
+}
 
 STATIC EFI_GUID  mFdtTableGuid = {
   0xb1b621d5, 0xf19c, 0x41a5, { 0x83, 0x0b, 0xd9, 0x15, 0x2c, 0x69, 0xaa, 0xe0 }
@@ -750,6 +781,13 @@ OnTextOut (
          然后 CoreTerminateMemoryMap(MapKey) 校验失败, 返回 EFI_INVALID_PARAMETER。
        第二次调用时回调不会重复执行, 所以再取一次 key 就能成功。
        循环内不做任何打印/分配, 避免自己又把 key 弄失效。            */
+    /* 标记: 已经准备调用 ExitBootServices（画在屏幕上，和 EBS 之后的日志区分开） */
+    if (XnuPayloadSize () > 0) {
+      Fill (0xFF1A0000);
+      mLogY = 40;
+      XnuScreenLog ("BEFORE EBS", XnuPayloadSize ());
+    }
+
     St = EFI_ABORTED;
     if (mMapBuf != NULL) {
       for (idx = 0; idx < 8; idx++) {
@@ -807,8 +845,12 @@ OnTextOut (
     } else {
       /* 退出成功: 优先启动内嵌的 XNU payload；没有 payload 时退回 M5 自测内核 */
       if (XnuPayloadSize () > 0) {
+        Fill (0xFF000000);
+        mLogY = 40;
+        XnuScreenLog ("EBS OK", XnuPayloadSize ());
         XnuBootRun (XnuPayloadAddr (), XnuPayloadSize (),
-                    (UINTN) mFb, (UINTN) mFbPitch, mFbW, mFbH);
+                    (UINTN) mFb, (UINTN) mFbPitch, mFbW, mFbH, XnuScreenLog);
+        XnuScreenLog ("RETURNED", 0);
       }
       if (mKernelStack != 0 && mKernelEntry != 0) {
         BuildBootArgs (mFdtAddr, mFdtSize, mMemSize);
