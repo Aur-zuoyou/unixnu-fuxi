@@ -13,6 +13,9 @@ on:
   push:
     paths:
       - "loader/**"
+      - "payload/**"
+      - "tools/**"
+      - "rom/xnu/**"
       - ".github/workflows/build-fuxi-uefi.yml"
   workflow_dispatch:
 
