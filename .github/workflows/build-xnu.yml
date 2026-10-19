@@ -203,25 +203,6 @@ jobs:
           echo "=== pass 1 ==="
           make -j"$NCPU" ARCH_CONFIGS=ARM64 KERNEL_CONFIGS=RELEASE || true
 
-          echo "=== 手工汇编 start.o ==="
-          INCS="-I. -I$OBJ/EXPORT_HDRS -I$OBJ/osfmk/RELEASE -I$OBJ"
-          for d in osfmk bsd pexpert libkern iokit security san osfmk/arm64; do
-            if [ -d "$d" ]; then INCS="$INCS -I$d"; fi
-          done
-          echo "INCS=$INCS"
-          mkdir -p "$OBJ/osfmk/arm64"
-          SFLAGS_FILE="$OBJ/osfmk/RELEASE/.SFLAGS"
-          if [ -f "$SFLAGS_FILE" ]; then
-            echo "=== .SFLAGS 前 20 行 ==="
-            head -20 "$SFLAGS_FILE"
-            SFLAGS="$(cat "$SFLAGS_FILE")"
-          else
-            SFLAGS="-DARM64=1 -DKERNEL=1 -DPRIVATE=1 -DXNU_TARGET_OS_OSX=1"
-          fi
-          clang -c -o "$OBJ/osfmk/arm64/start.o" osfmk/arm64/start.s $INCS $SFLAGS 2>&1 | head -30 || true
-          ls -l "$OBJ/osfmk/arm64/start.o" 2>/dev/null || echo "start.o 仍未生成"
-          nm "$OBJ/osfmk/arm64/start.o" 2>/dev/null | grep -i __start | head -3 || true
-
           echo "=== pass 2 ==="
           make -j"$NCPU" ARCH_CONFIGS=ARM64 KERNEL_CONFIGS=RELEASE || true
 

@@ -38,17 +38,14 @@ def patch_one(root: Path, list_path: Path) -> int:
     for i, line in enumerate(lines):
         if line.lstrip().startswith("#"):
             continue
-        if "start.s" not in line:
+        # 放开所有带 nos_arm_asm 的条目（只限源文件真实存在的）
+        if "nos_arm_asm" not in line:
             continue
 
         parts = line.split()
         if not parts:
             continue
         src_rel = parts[0]
-
-        # 只处理 arm64 的 start.s（x86_64 那个本来就是 standard）
-        if not src_rel.endswith("arm64/start.s"):
-            continue
 
         if not (root / src_rel).exists():
             print(f"跳过（源码不存在）: {src_rel}")
