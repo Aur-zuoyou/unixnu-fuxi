@@ -81,7 +81,7 @@ XnuLoadFromBlock (
     return Status;
   }
 
-  for (I = 0; I < Count; i++) {
+  for (I = 0; I < Count; I++) {
     Bio = NULL;
     if (EFI_ERROR (gBS->HandleProtocol (Handles[I], &gEfiBlockIoProtocolGuid, (VOID **)&Bio))) {
       continue;
