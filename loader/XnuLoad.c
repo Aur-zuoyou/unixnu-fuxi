@@ -81,6 +81,9 @@ XnuLoadFromBlock (
                   &Handles
                   );
   if (EFI_ERROR (Status)) {
+    if (Log != NULL) {
+      Log ("BLK ERR", (UINT64)Status);
+    }
     return Status;
   }
 

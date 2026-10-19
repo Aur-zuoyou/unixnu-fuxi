@@ -183,6 +183,32 @@ jobs:
           echo "--- 确认 FDF(键盘) ---"
           grep -n "UsbKbDxe" edk2-msm/Platform/Qualcomm/sm8550/sm8550.fdf
 
+
+          echo "=== 查找可用的块设备驱动 ==="
+          UFS=$(find edk2-msm -iname "Ufs*Dxe*.inf" -o -iname "*UfsDxe*.inf" 2>/dev/null | head -1)
+          PART=$(find edk2-msm -iname "PartitionDxe.inf" 2>/dev/null | head -1)
+          FAT=$(find edk2-msm -iname "Fat.inf" -o -iname "FatDxe.inf" 2>/dev/null | head -1)
+          echo "UFS   = [$UFS]"
+          echo "PART  = [$PART]"
+          echo "FAT   = [$FAT]"
+          echo "=== 已在 FDF 里的相关驱动 ==="
+          grep -inE "ufs|partition|fat" edk2-msm/Platform/Qualcomm/sm8550/sm8550.fdf | head -20 || true
+
+          FDF=edk2-msm/Platform/Qualcomm/sm8550/sm8550.fdf
+          for INF in "$UFS" "$PART" "$FAT"; do
+            if [ -n "$INF" ]; then
+              REL=$(echo "$INF" | sed "s|^edk2-msm/||")
+              if ! grep -q "$REL" "$FDF"; then
+                sed -i "/INF MdeModulePkg\/Universal\/BdsDxe\/BdsDxe.inf/a\\  INF $REL" "$FDF"
+                echo "已加入 FDF: $REL"
+              else
+                echo "FDF 里已有: $REL"
+              fi
+            fi
+          done
+          echo "=== 确认 ==="
+          grep -inE "ufs|partition|fat" "$FDF" | head -20 || true
+
       - name: 固件补丁：放宽 DxeCore 检查（实验性）
         run: |
           # Common/edk2 是子模块, clone --depth 1 不会拉, 必须先初始化
