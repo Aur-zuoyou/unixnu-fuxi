@@ -31,6 +31,8 @@ extern VOID         XnuBootRun (CONST VOID *, UINTN, UINTN, UINTN, UINT32, UINT3
                                 VOID (*)(CONST CHAR8 *, UINT64));
 
 
+STATIC VOID DrawString (UINT32 X, UINT32 Y, CONST CHAR8 *Str, UINT32 Color);
+
 /* EBS 之后 ConOut 已经没了，日志用自己的点阵字体画到屏幕 */
 STATIC UINT32  mLogY;
 
