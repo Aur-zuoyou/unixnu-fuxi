@@ -189,6 +189,7 @@ jobs:
 
       - name: 构建 XNU（私有寄存器行自动注释后重编）
         run: |
+          set +e          # GitHub 默认 bash -e；while read 遇到空文件会返回 1 导致中止
           set -x
           cd xnu
           NCPU=$(sysctl -n hw.ncpu)
@@ -204,7 +205,7 @@ jobs:
           echo "=== 原文 ==="
           while read -r ln; do
             if [ -n "$ln" ]; then sed -n "${ln}p" "$ASM"; fi
-          done < /tmp/spr_lines.txt
+          done < /tmp/spr_lines.txt || true
 
           echo "=== 注释掉这些行 ==="
           while read -r ln; do
@@ -212,7 +213,7 @@ jobs:
               sed -i "" "${ln}s|^|// fuxi: apple SPR not on snapdragon |" "$ASM"
               sed -n "${ln}p" "$ASM"
             fi
-          done < /tmp/spr_lines.txt
+          done < /tmp/spr_lines.txt || true
 
           echo "=== pass 2 ==="
           make -j"$NCPU" ARCH_CONFIGS=ARM64 KERNEL_CONFIGS=RELEASE > pass2.log 2>&1 || true
