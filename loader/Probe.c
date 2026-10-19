@@ -908,10 +908,7 @@ OnTextOut (
         mLogY = 40;
         XnuScreenLog ("EBS OK", (mXnuBufSize > 0) ? mXnuBufSize : XnuPayloadSize ());
 
-        /* 跳转自测：不跳 XNU，改成关 MMU/缓存后把整屏刷成红色并停住。
-           能看到红色 = 关 MMU 这套动作本身是好的。 */
-        XnuScreenLog ("SELFTEST", (UINT64) mFbSize);
-        AsmXnuSelfTest ((UINTN) mFb, (UINTN) mFbSize, 0xFFFF0000U);
+        /* 自测已通过（整屏变红 = 关 MMU/缓存正确），现在真正跳 XNU */
 
         XnuBootRun ((mXnuBufSize > 0) ? mXnuBuf : XnuPayloadAddr (),
                     (mXnuBufSize > 0) ? mXnuBufSize : XnuPayloadSize (),
