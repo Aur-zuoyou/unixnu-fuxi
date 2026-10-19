@@ -325,6 +325,8 @@ jobs:
             build.log
             pack.log
             startup.log
+            pass1.log
+            pass2.log
             undef.log
             tunables.log
             genfiles.log
