@@ -1,0 +1,17 @@
+diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
+--- a/osfmk/arm64/start.s
++++ b/osfmk/arm64/start.s
+@@ -219,7 +219,13 @@
+  */
+ 	.align	3
+ 	.globl EXT(_start)
+ LEXT(_start)
++
++	/* fuxi: 证明内核代码被执行——往帧缓冲左上角写一个绿色像素 */
++	/* MMU 未开，x0 = boot_args 不能动，用 x9/x10 */
++	MOV64	x9, 0xB0000000
++	MOV64	x10, 0x0000FF00
++	str	w10, [x9]
+ 	b	EXT(start_first_cpu)
+ 
+ 
