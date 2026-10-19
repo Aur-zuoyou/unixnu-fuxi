@@ -42,15 +42,32 @@ jobs:
           git clone --depth 1 https://github.com/alephsecurity/xnu-qemu-arm64-tools.git || true
           echo "== 1. 他们的工具仓库结构 =="
           ls -R xnu-qemu-arm64-tools 2>/dev/null | head -60 || true
-      - name: 取 XNU 源码
+      - name: 取 XNU 源码（可切换版本）
+        if: always()
         run: |
+          set +e
           exec > >(tee -a fetch.log) 2>&1
           set -x
-          git clone --depth 1 --branch xnu-8792.81.2 https://github.com/apple-oss-distributions/xnu.git
+          # 版本选择：
+          #   xnu-6153 = iOS 13 / macOS 10.15，没有 PPL、没有 SART/UAT
+          #   xnu-8792 = iOS 16，pmap 深度绑定 Apple 私有安全层（PPL/SART）
+          # 我们要的是"能跑在非 Apple 硬件上"，所以选老的。
+          for TAG in xnu-6153.11.26 xnu-6153.141.1 xnu-4903.221.2; do
+            echo "尝试 clone $TAG"
+            if git clone --depth 1 --branch "$TAG" https://github.com/apple-oss-distributions/xnu.git xnu 2>&1; then
+              echo "OK: $TAG"
+              echo "$TAG" > ../xnu-tag.txt
+              break
+            fi
+            rm -rf xnu
+          done
           cd xnu
           git log --oneline -1
-          echo "=== 树内 firehose 头 ==="
-          find . -name "*.h" -path "*firehose*" 2>/dev/null | head -10
+          echo "=== 版本确认 ==="
+          cat ../xnu-tag.txt 2>/dev/null || echo "(未记录)"
+          echo "=== 有没有 PPL/SART（iOS16 特征）==="
+          ls osfmk/arm64/ppl 2>/dev/null | head -5 || echo "(没有 ppl 目录 = 好)"
+          find . -name "sart*" 2>/dev/null | head -5 || true
 
       - name: 造 availability.pl（Xcode 15+ 才有问题）
         run: |
@@ -359,6 +376,7 @@ jobs:
           name: xnu-build-${{ github.run_number }}
           path: |
             env.log
+            xnu-tag.txt
             fetch.log
             fixup.log
             shim.log
