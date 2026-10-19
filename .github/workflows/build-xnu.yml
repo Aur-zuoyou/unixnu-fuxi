@@ -165,6 +165,27 @@ jobs:
           grep -rn "kernelsupport" makedefs 2>/dev/null | head -5 || true
           cd ..
 
+      - name: 补上缺失的 tunables.s（Apple 私有文件，开源树里没有）
+        run: |
+          exec > >(tee -a tunables.log) 2>&1
+          set -x
+          cd xnu
+
+          echo "=== start.s 里跟 tunables 有关的行 ==="
+          grep -n -i "tunables" osfmk/arm64/start.s || echo "(只有 include，正文没用到)"
+
+          echo "=== start.s 里可疑的宏用法（大写 TUNE/TUNABLE 前缀）==="
+          grep -n -E "\b(TUNE|TUNABLE)[A-Z_]*" osfmk/arm64/start.s | head -20 || echo "(没有)"
+
+          echo "=== 建一个空的 tunables.s ==="
+          mkdir -p osfmk/arm64/tunables
+          if [ ! -f osfmk/arm64/tunables/tunables.s ]; then
+            printf "/* fuxi: placeholder for Apple private tunables. Empty on purpose. */\n" > osfmk/arm64/tunables/tunables.s
+          fi
+          ls -l osfmk/arm64/tunables/tunables.s
+          cat osfmk/arm64/tunables/tunables.s
+
+
       - name: 构建 XNU（手工汇编 start.o，含完整 include 路径）
         run: |
           exec > >(tee -a build.log) 2>&1
@@ -291,6 +312,7 @@ jobs:
             build.log
             pack.log
             startup.log
+            tunables.log
             genfiles.log
             asflags.log
             startfix.log
