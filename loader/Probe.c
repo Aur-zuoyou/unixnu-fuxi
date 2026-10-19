@@ -22,7 +22,7 @@
 #include <Library/PrintLib.h>
 #include <Protocol/GraphicsOutput.h>
 
-#define SCALE      6
+#define SCALE      4
 #define LINE_H     (8 * SCALE + 24)
 
 extern UINTN        XnuPayloadSize (VOID);
@@ -73,7 +73,7 @@ XnuScreenLog (
 
   DrawString (20, mLogY, Line, 0xFFFFFFFF);
   SweepFb ();
-  mLogY += 60;   /* 字形高 8*SCALE=48，行距必须更大 */
+  mLogY += 44;   /* 字形高 8*SCALE=48，行距必须更大 */
 }
 
 STATIC EFI_GUID  mFdtTableGuid = {
