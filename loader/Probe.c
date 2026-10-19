@@ -66,7 +66,7 @@ XnuScreenLog (
 
   DrawString (20, mLogY, Line, 0xFFFFFFFF);
   SweepFb ();
-  mLogY += 24;
+  mLogY += 60;   /* 字形高 8*SCALE=48，行距必须更大 */
 }
 
 STATIC EFI_GUID  mFdtTableGuid = {
