@@ -75,7 +75,11 @@ XnuPickPhysRegion (
     if (Bytes < NEED_BYTES) {
       continue;
     }
-    /* 优先选最高的那块（通常在高位内存，避开固件自己用的低地址） */
+    /* 只考虑整块都在 4GB 以下的内存：UEFI 的页表很可能只映射了前 4GB，
+       选到 4GB 以上会触发 external abort（实测过） */
+    if (D->PhysicalStart + Bytes > 0x100000000ULL) {
+      continue;
+    }
     if ((D->PhysicalStart > BestBase) || (BestBase == 0)) {
       BestBase = D->PhysicalStart;
       BestSize = Bytes;
