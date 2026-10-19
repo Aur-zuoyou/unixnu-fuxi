@@ -27,6 +27,8 @@
 
 extern UINTN        XnuPayloadSize (VOID);
 extern CONST VOID  *XnuPayloadAddr (VOID);
+extern EFI_STATUS   XnuLoadFromUfs (VOID **Buf, UINTN *Size,
+                                    VOID (*Log)(CONST CHAR8 *, UINT64));
 extern EFI_STATUS   XnuLoadFromBlock (VOID **Buf, UINTN *Size,
                                       VOID (*Log)(CONST CHAR8 *, UINT64));
 extern VOID         XnuBootRun (CONST VOID *, UINTN, UINTN, UINTN, UINT32, UINT32,
@@ -821,6 +823,10 @@ OnTextOut (
       mLogY = 40;
       XnuScreenLog ("EMBEDDED", XnuPayloadSize ());
       XnuLoadFromBlock (&mXnuBuf, &mXnuBufSize, XnuScreenLog);
+      if (mXnuBufSize == 0) {
+        XnuScreenLog ("BLK EMPTY, TRY UFS", 0);
+        XnuLoadFromUfs (&mXnuBuf, &mXnuBufSize, XnuScreenLog);
+      }
       XnuScreenLog ("BUF SIZE", mXnuBufSize);
     }
 
