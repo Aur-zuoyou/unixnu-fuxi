@@ -30,6 +30,10 @@
 /* payload 由 CI 生成的 xnu_payload.S 以 .incbin 方式嵌入 */
 typedef VOID (*XNU_LOG_FN)(CONST CHAR8 *Tag, UINT64 Value);
 
+extern UINT64      mXnuPhysBase;
+extern UINT64      mXnuPhysSize;
+extern UINT32      XnuPatchAdt (UINT8 *Adt, UINTN Len, UINT64 Base, UINT64 Size);
+
 extern CONST UINT8  gXnuPayload[];
 extern CONST UINT8  gXnuPayloadEnd[];
 
@@ -209,6 +213,15 @@ XnuBootRun (
   KernelEnd = Hdr[4];
   PhysBase  = Hdr[5];
   MemSize   = Hdr[6];
+  /* 用 EFI 内存图挑出来的真实可用内存覆盖 ADT 里的硬编码值 */
+  if (mXnuPhysBase != 0) {
+    PhysBase = mXnuPhysBase;
+    MemSize  = mXnuPhysSize;
+    if (Log != NULL) {
+      Log ("USE PICKED", PhysBase);
+    }
+  }
+
   PaOfVa    = PhysBase - VirtBase;
 
   if (Log != NULL) {
@@ -241,6 +254,16 @@ XnuBootRun (
   /* 2. ADT 放内核末尾，boot_args 放 ADT 之后（16K 对齐） */
   AdtPa = KernelEnd + PaOfVa;
   Copy64 ((UINTN)AdtPa, (UINTN)(P + AdtOff), (UINTN)AdtSize);
+
+  /* 把 ADT 里的 dram-base/dram-size 改成实际使用的那块内存 */
+  {
+    UINT32  Patched;
+
+    Patched = XnuPatchAdt ((UINT8 *)(UINTN)AdtPa, (UINTN)AdtSize, PhysBase, MemSize);
+    if (Log != NULL) {
+      Log ("ADT PATCHED", (UINT64)Patched);
+    }
+  }
 
   BaPa = (AdtPa + AdtSize + PAGE_16K - 1) & ~(PAGE_16K - 1);
   Top  = BaPa + PAGE_16K;

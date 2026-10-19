@@ -27,6 +27,7 @@
 
 extern UINTN        XnuPayloadSize (VOID);
 extern CONST VOID  *XnuPayloadAddr (VOID);
+extern UINT32       XnuPickPhysRegion (VOID (*Log)(CONST CHAR8 *, UINT64));
 extern EFI_STATUS   XnuLoadFromFv (VOID **Buf, UINTN *Size,
                                    VOID (*Log)(CONST CHAR8 *, UINT64));
 extern EFI_STATUS   XnuLoadFromUfs (VOID **Buf, UINTN *Size,
@@ -824,6 +825,7 @@ OnTextOut (
       Fill (0xFF001800);
       mLogY = 40;
       XnuScreenLog ("EMBEDDED", XnuPayloadSize ());
+      XnuPickPhysRegion (XnuScreenLog);
       XnuLoadFromFv (&mXnuBuf, &mXnuBufSize, XnuScreenLog);
       if (mXnuBufSize == 0) {
         XnuScreenLog ("FV EMPTY, TRY BLK", 0);
