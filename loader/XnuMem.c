@@ -45,7 +45,7 @@ XnuPickPhysRegion (
 
   /* 让 UEFI 直接分配：分配到的内存一定是映射好、可写的。
      内核 + ADT + boot_args 大约需要 32MB，这里按 48MB 申请。 */
-  Want = NEED_BYTES / EFI_PAGE_SIZE;
+  Want = (NEED_BYTES + 0x2000000ULL) / EFI_PAGE_SIZE;
   Status = gBS->AllocatePages (AllocateAnyPages, EfiLoaderData, Want, &Pages);
   if (EFI_ERROR (Status)) {
     if (Log != NULL) {
@@ -54,7 +54,11 @@ XnuPickPhysRegion (
     return 1;
   }
 
-  mXnuPhysBase = (UINT64)Pages;
+  /*
+   * XNU 的 start.s 用 32MB 块描述符建映射，physBase 必须 32MB 对齐，
+   * 否则块边界和 virtBase 对不上，一开 MMU 就崩（实测症状：没有蓝带）。
+   */
+  mXnuPhysBase = ((UINT64)Pages + 0x1FFFFFFULL) & ~0x1FFFFFFULL;
 
   /* 告诉 XNU 的 dram 窗口：从这块开始，一直到 4GB（UEFI 大概只映射到这里） */
   End = 0x100000000ULL;
