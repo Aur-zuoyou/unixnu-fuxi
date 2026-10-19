@@ -82,6 +82,7 @@ jobs:
           head -30 xnu/EXTERNAL_HEADERS/os/firehose_buffer_private.h
 
       - name: 放开 start.s 的编译条件（消除 __start undefined）
+        if: always()
         run: |
           exec > >(tee -a startfix.log) 2>&1
           set -x
@@ -90,6 +91,7 @@ jobs:
           grep -n "arm64/start.s" xnu/osfmk/conf/files.arm64 || echo "(没找到)"
 
       - name: 给汇编器补 include 路径（start.s 会 include 别的 .s/.h）
+        if: always()
         run: |
           exec > >(tee -a asflags.log) 2>&1
           set -x
@@ -135,6 +137,7 @@ jobs:
           grep -rn -- "-Werror" makedefs 2>/dev/null | head -5 || echo "(已清空)"
 
       - name: 造一个空的 libVMAPPLE.os.RELEASE.a（Apple 私有内核支持库）
+        if: always()
         run: |
           exec > >(tee -a kernlib.log) 2>&1
           set -x
@@ -166,6 +169,7 @@ jobs:
           cd ..
 
       - name: 补上缺失的 tunables.s（Apple 私有文件，开源树里没有）
+        if: always()
         run: |
           exec > >(tee -a tunables.log) 2>&1
           set -x
@@ -188,6 +192,7 @@ jobs:
 
 
       - name: 构建 XNU（私有寄存器行自动注释后重编）
+        if: always()
         run: |
           set +e          # GitHub 默认 bash -e；while read 遇到空文件会返回 1 导致中止
           set -x
@@ -324,6 +329,7 @@ jobs:
             werror.log
             build.log
             pack.log
+            kernlib.log
             startup.log
             pass1.log
             pass2.log
