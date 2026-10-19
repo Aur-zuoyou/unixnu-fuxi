@@ -51,6 +51,13 @@ def patch_one(root: Path, list_path: Path) -> int:
             print(f"跳过（源码不存在）: {src_rel}")
             continue
 
+        # machine_routines_asm.s 里有 Apple 私有系统寄存器（ACC_OVRD 等），
+        # clang 的集成汇编器不认，而且这些寄存器在骁龙上不存在。
+        # 先保持排除，看链接器还缺不缺它的符号。
+        if src_rel.endswith("machine_routines_asm.s"):
+            print(f"跳过（Apple 私有寄存器）: {src_rel}")
+            continue
+
         new = f"{src_rel}\tstandard"
         if new != line:
             print(f"第 {i + 1} 行: {line}")
