@@ -25,6 +25,10 @@
 #define SCALE      6
 #define LINE_H     (8 * SCALE + 24)
 
+extern UINTN        XnuPayloadSize (VOID);
+extern CONST VOID  *XnuPayloadAddr (VOID);
+extern VOID         XnuBootRun (CONST VOID *, UINTN, UINTN, UINTN, UINT32, UINT32);
+
 STATIC EFI_GUID  mFdtTableGuid = {
   0xb1b621d5, 0xf19c, 0x41a5, { 0x83, 0x0b, 0xd9, 0x15, 0x2c, 0x69, 0xaa, 0xe0 }
 
@@ -837,7 +841,11 @@ OnTextOut (
         }
       }
     } else {
-      /* 退出成功: 构造 boot_args, 按 XNU 的约定传 x0=&boot_args (M6 自测) */
+      /* 退出成功: 优先启动内嵌的 XNU payload；没有 payload 时退回 M5 自测内核 */
+      if (XnuPayloadSize () > 0) {
+        XnuBootRun (XnuPayloadAddr (), XnuPayloadSize (),
+                    (UINTN) mFb, (UINTN) mFbPitch, mFbW, mFbH);
+      }
       if (mKernelStack != 0 && mKernelEntry != 0) {
         BuildBootArgs (mFdtAddr, mFdtSize, mMemSize);
         JumpToBootArgs (mKernelEntry, (UINTN) &gBootArgs, mKernelStack);

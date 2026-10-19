@@ -12,6 +12,9 @@
 
 [Sources]
   Probe.c
+  XnuBoot.c
+  xnu_jump.S
+  xnu_payload.S
   fuxi_dtb.c
   kernel_blob.c
 
