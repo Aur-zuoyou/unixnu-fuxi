@@ -28,6 +28,7 @@
 extern UINTN        XnuPayloadSize (VOID);
 extern CONST VOID  *XnuPayloadAddr (VOID);
 extern UINT32       XnuMmuInstall (UINTN WbLo, UINTN WbHi);
+extern VOID         AsmXnuSelfTest (UINTN Fb, UINTN Bytes, UINT32 Color);
 extern UINT32       XnuPickPhysRegion (VOID (*Log)(CONST CHAR8 *, UINT64));
 extern EFI_STATUS   XnuLoadFromFv (VOID **Buf, UINTN *Size,
                                    VOID (*Log)(CONST CHAR8 *, UINT64));
@@ -906,7 +907,12 @@ OnTextOut (
         Fill (0xFF000000);
         mLogY = 40;
         XnuScreenLog ("EBS OK", (mXnuBufSize > 0) ? mXnuBufSize : XnuPayloadSize ());
-        XnuScreenLog ("MMU OWN", 1);
+
+        /* 跳转自测：不跳 XNU，改成关 MMU/缓存后把整屏刷成红色并停住。
+           能看到红色 = 关 MMU 这套动作本身是好的。 */
+        XnuScreenLog ("SELFTEST", (UINT64) mFbSize);
+        AsmXnuSelfTest ((UINTN) mFb, (UINTN) mFbSize, 0xFFFF0000U);
+
         XnuBootRun ((mXnuBufSize > 0) ? mXnuBuf : XnuPayloadAddr (),
                     (mXnuBufSize > 0) ? mXnuBufSize : XnuPayloadSize (),
                     (UINTN) mFb, (UINTN) mFbPitch, mFbW, mFbH, XnuScreenLog);

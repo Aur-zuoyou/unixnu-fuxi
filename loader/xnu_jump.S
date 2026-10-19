@@ -1,8 +1,9 @@
-// xnu_jump.S —— 关 MMU / 清缓存 / 跳进 XNU
+// xnu_jump.S —— 关 MMU / 清缓存 / 跳进 XNU，以及"跳转自测"桩
 //
-// 两个函数：
-//   AsmXnuDcacheCleanRange(x0 = start, x1 = end)   按 VA 清 D-cache
-//   AsmXnuJump(x0 = entry_pa, x1 = boot_args_pa)   关 MMU/缓存后跳转，x0 = boot_args
+// AsmXnuDcacheCleanRange(x0 = start, x1 = end)   按 VA 清 D-cache
+// AsmXnuJump(x0 = entry_pa, x1 = boot_args_pa)   关 MMU/缓存后跳转，x0 = boot_args
+// AsmXnuSelfTest(x0 = fb, x1 = bytes, x2 = color)
+//     关 MMU/缓存后把帧缓冲刷成指定颜色并停住 —— 用来验证"跳转+关 MMU"这套动作本身
 
 .text
 
@@ -13,11 +14,11 @@
 .type   AsmXnuDcacheCleanRange, %function
 AsmXnuDcacheCleanRange:
     mrs     x2, ctr_el0
-    ubfx    x3, x2, #16, #4         // DminLine = log2(行字节数) - 2
+    ubfx    x3, x2, #16, #4
     mov     x4, #4
-    lsl     x4, x4, x3              // 行字节数
+    lsl     x4, x4, x3
     sub     x5, x4, #1
-    bic     x0, x0, x5              // 对齐到行首
+    bic     x0, x0, x5
 1:
     dc      cvac, x0
     add     x0, x0, x4
@@ -33,16 +34,45 @@ AsmXnuDcacheCleanRange:
 .global AsmXnuJump
 .type   AsmXnuJump, %function
 AsmXnuJump:
-    msr     daifset, #0xf           // 关全部中断
-    mov     x3, x0                  // entry
-    mov     x4, x1                  // boot_args
+    msr     daifset, #0xf
+    mov     x3, x0
+    mov     x4, x1
 
-    // 清 I-cache（整条流水线），并同步
     ic      iallu
     dsb     sy
     isb
 
-    // 关 MMU 与缓存：SCTLR_EL1.M/A/C/I = 0
+    mrs     x2, sctlr_el1
+    bic     x2, x2, #0x1
+    bic     x2, x2, #0x2
+    bic     x2, x2, #0x4
+    bic     x2, x2, #0x1000
+    msr     sctlr_el1, x2
+    isb
+    dsb     sy
+
+    mov     x0, x4
+    br      x3
+.size   AsmXnuJump, . - AsmXnuJump
+
+// ---------------------------------------------------------------------------
+// void AsmXnuSelfTest(UINTN fb, UINTN bytes, UINT32 color)
+//
+// 关 MMU 和缓存之后，直接把整块帧缓冲写成 color，然后停住。
+// 能看到颜色 = 跳转前的这段状态切换（关 MMU/缓存）是好的。
+// ---------------------------------------------------------------------------
+.global AsmXnuSelfTest
+.type   AsmXnuSelfTest, %function
+AsmXnuSelfTest:
+    msr     daifset, #0xf
+    mov     x5, x0                  // fb
+    mov     x6, x1                  // bytes
+    mov     x7, x2                  // color
+
+    ic      iallu
+    dsb     sy
+    isb
+
     mrs     x2, sctlr_el1
     bic     x2, x2, #0x1            // M
     bic     x2, x2, #0x2            // A
@@ -52,7 +82,14 @@ AsmXnuJump:
     isb
     dsb     sy
 
-    // x0 = boot_args 物理地址，跳到入口
-    mov     x0, x4
-    br      x3
-.size   AsmXnuJump, . - AsmXnuJump
+    // 按 4 字节写整块显存（MMU 关了，全是 Device，写直通）
+2:
+    str     w7, [x5], #4
+    subs    x6, x6, #4
+    b.ne    2b
+
+    dsb     sy
+3:
+    wfi
+    b       3b
+.size   AsmXnuSelfTest, . - AsmXnuSelfTest
