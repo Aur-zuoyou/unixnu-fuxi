@@ -38,8 +38,9 @@ def patch_one(root: Path, list_path: Path) -> int:
     for i, line in enumerate(lines):
         if line.lstrip().startswith("#"):
             continue
-        # 放开所有带 nos_arm_asm 的条目（只限源文件真实存在的）
-        if "nos_arm_asm" not in line:
+        # 放开所有带 nos_* 门控的条目（nos_arm_asm / nos_arm_pmap 等），
+        # 前提是源文件在开源树里真实存在。
+        if "nos_" not in line:
             continue
 
         parts = line.split()

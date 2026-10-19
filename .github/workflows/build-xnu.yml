@@ -191,47 +191,54 @@ jobs:
           cat osfmk/arm64/tunables/tunables.s
 
 
-      - name: 构建 XNU（私有寄存器行自动注释后重编）
+      - name: 构建 XNU（三段式：修 SPR → 补空实现 → 链接）
         if: always()
         run: |
-          set +e          # GitHub 默认 bash -e；while read 遇到空文件会返回 1 导致中止
+          set +e
           set -x
           cd xnu
           NCPU=$(sysctl -n hw.ncpu)
+          MAKE="make -j$NCPU ARCH_CONFIGS=ARM64 KERNEL_CONFIGS=RELEASE"
 
-          echo "=== pass 1 ==="
-          make -j"$NCPU" ARCH_CONFIGS=ARM64 KERNEL_CONFIGS=RELEASE > pass1.log 2>&1 || true
-          tail -30 pass1.log
+          echo "########## pass 1 ##########"
+          $MAKE > pass1.log 2>&1
+          tail -20 pass1.log
 
+          # --- 注释 Apple 私有系统寄存器（clang 不认）---
           ASM=osfmk/arm64/machine_routines_asm.s
-          echo "=== 从 pass1.log 提取出问题的行号 ==="
-          grep -oE "machine_routines_asm\.s:[0-9]+" pass1.log 2>/dev/null | cut -d: -f2 | sort -un > /tmp/spr_lines.txt || true
-          echo "行号列表:"; cat /tmp/spr_lines.txt 2>/dev/null || true
-          echo "=== 原文 ==="
-          while read -r ln; do
-            if [ -n "$ln" ]; then sed -n "${ln}p" "$ASM"; fi
-          done < /tmp/spr_lines.txt || true
-
-          echo "=== 注释掉这些行 ==="
+          grep -oE "machine_routines_asm\.s:[0-9]+" pass1.log 2>/dev/null | cut -d: -f2 | sort -un > /tmp/spr.txt
+          echo "SPR 行号: $(tr '\n' ' ' < /tmp/spr.txt)"
           while read -r ln; do
             if [ -n "$ln" ]; then
-              sed -i "" "${ln}s|^|// fuxi: apple SPR not on snapdragon |" "$ASM"
               sed -n "${ln}p" "$ASM"
+              sed -i "" "${ln}s|^|// fuxi: apple SPR not on snapdragon |" "$ASM"
             fi
-          done < /tmp/spr_lines.txt || true
+          done < /tmp/spr.txt
 
-          echo "=== pass 2 ==="
-          make -j"$NCPU" ARCH_CONFIGS=ARM64 KERNEL_CONFIGS=RELEASE > pass2.log 2>&1 || true
-          tail -40 pass2.log
+          echo "########## pass 2 ##########"
+          $MAKE > pass2.log 2>&1
+          tail -20 pass2.log
 
-          echo "=== 产出物 ==="
+          # --- 未定义符号 → 空实现 ---
+          echo "########## 生成空实现 ##########"
+          python3 "$GITHUB_WORKSPACE/tools/gen_stubs.py" pass2.log osfmk/arm64/fuxi_stubs.c
+          head -20 osfmk/arm64/fuxi_stubs.c 2>/dev/null
+
+          if ! grep -q "osfmk/arm64/fuxi_stubs.c" osfmk/conf/files.arm64; then
+            printf "osfmk/arm64/fuxi_stubs.c\tstandard\n" >> osfmk/conf/files.arm64
+            echo "已把 fuxi_stubs.c 加入 files.arm64"
+          fi
+
+          echo "########## pass 3 ##########"
+          $MAKE > pass3.log 2>&1
+          tail -40 pass3.log
+
+          echo "########## 产出物 ##########"
           ls -lh BUILD/obj/RELEASE_ARM64_VMAPPLE/kernel* 2>/dev/null || echo "还没有 kernel"
           find BUILD -name "kernel.release*" -type f | head -5
 
-          # 把两个 pass 的日志合并成 build.log 供后续步骤使用
-          cat pass1.log pass2.log > build.log
-          # 上面的日志都写在 xnu/ 目录里，拷回仓库根目录（后续步骤和产物都在根目录找）
-          cp -f pass1.log pass2.log build.log .. 2>/dev/null || true
+          cat pass1.log pass2.log pass3.log > build.log
+          cp -f pass1.log pass2.log pass3.log build.log .. 2>/dev/null || true
 
       - name: 诊断 config 的 tag 与 arm64 汇编的归属
         if: always()
@@ -335,6 +342,7 @@ jobs:
             startup.log
             pass1.log
             pass2.log
+            pass3.log
             undef.log
             tunables.log
             genfiles.log
