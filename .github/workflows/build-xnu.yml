@@ -230,6 +230,8 @@ jobs:
 
           # 把两个 pass 的日志合并成 build.log 供后续步骤使用
           cat pass1.log pass2.log > build.log
+          # 上面的日志都写在 xnu/ 目录里，拷回仓库根目录（后续步骤和产物都在根目录找）
+          cp -f pass1.log pass2.log build.log .. 2>/dev/null || true
 
       - name: 诊断 config 的 tag 与 arm64 汇编的归属
         if: always()
