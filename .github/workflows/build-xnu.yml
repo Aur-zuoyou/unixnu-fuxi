@@ -189,23 +189,24 @@ jobs:
 
       - name: 构建 XNU（私有寄存器行自动注释后重编）
         run: |
-          exec > >(tee -a build.log) 2>&1
           set -x
           cd xnu
           NCPU=$(sysctl -n hw.ncpu)
 
           echo "=== pass 1 ==="
-          make -j"$NCPU" ARCH_CONFIGS=ARM64 KERNEL_CONFIGS=RELEASE || true
+          make -j"$NCPU" ARCH_CONFIGS=ARM64 KERNEL_CONFIGS=RELEASE > pass1.log 2>&1 || true
+          tail -30 pass1.log
 
           ASM=osfmk/arm64/machine_routines_asm.s
-          echo "=== 从错误里提取需要注释的行号 ==="
-          grep -oE "machine_routines_asm\.s:[0-9]+" build.log 2>/dev/null | cut -d: -f2 | sort -un > /tmp/spr_lines.txt || true
-          cat /tmp/spr_lines.txt 2>/dev/null || echo "(没有)"
-          echo "=== 这些行的原文 ==="
+          echo "=== 从 pass1.log 提取出问题的行号 ==="
+          grep -oE "machine_routines_asm\.s:[0-9]+" pass1.log 2>/dev/null | cut -d: -f2 | sort -un > /tmp/spr_lines.txt || true
+          echo "行号列表:"; cat /tmp/spr_lines.txt 2>/dev/null || true
+          echo "=== 原文 ==="
           while read -r ln; do
-            [ -n "$ln" ] && sed -n "${ln}p" "$ASM"
+            if [ -n "$ln" ]; then sed -n "${ln}p" "$ASM"; fi
           done < /tmp/spr_lines.txt
-          echo "=== 注释掉它们（Apple 私有系统寄存器，骁龙上不存在）==="
+
+          echo "=== 注释掉这些行 ==="
           while read -r ln; do
             if [ -n "$ln" ]; then
               sed -i "" "${ln}s|^|// fuxi: apple SPR not on snapdragon |" "$ASM"
@@ -214,11 +215,15 @@ jobs:
           done < /tmp/spr_lines.txt
 
           echo "=== pass 2 ==="
-          make -j"$NCPU" ARCH_CONFIGS=ARM64 KERNEL_CONFIGS=RELEASE || true
+          make -j"$NCPU" ARCH_CONFIGS=ARM64 KERNEL_CONFIGS=RELEASE > pass2.log 2>&1 || true
+          tail -40 pass2.log
 
           echo "=== 产出物 ==="
           ls -lh BUILD/obj/RELEASE_ARM64_VMAPPLE/kernel* 2>/dev/null || echo "还没有 kernel"
           find BUILD -name "kernel.release*" -type f | head -5
+
+          # 把两个 pass 的日志合并成 build.log 供后续步骤使用
+          cat pass1.log pass2.log > build.log
 
       - name: 诊断 config 的 tag 与 arm64 汇编的归属
         if: always()
