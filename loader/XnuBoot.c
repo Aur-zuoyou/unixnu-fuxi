@@ -304,5 +304,17 @@ XnuBootRun (
   AsmXnuDcacheCleanRange ((UINTN)AdtPa, (UINTN)(AdtPa + AdtSize));
   AsmXnuDcacheCleanRange ((UINTN)BaPa, (UINTN)(BaPa + PAGE_16K));
 
+  /* 跳之前把入口地址和那里的头 8 字节打出来：确认那儿真的是代码 */
+  {
+    UINT64  EntryPa = EntryVa + PaOfVa;
+    UINT64  Head;
+
+    CopyMem (&Head, (VOID *)(UINTN)EntryPa, 8);
+    if (Log != NULL) {
+      Log ("ENTRY PA", EntryPa);
+      Log ("CODE@ENTRY", Head);
+    }
+  }
+
   AsmXnuJump ((UINTN)(EntryVa + PaOfVa), (UINTN)BaPa);
 }
