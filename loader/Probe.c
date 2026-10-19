@@ -35,6 +35,29 @@ extern VOID         XnuBootRun (CONST VOID *, UINTN, UINTN, UINTN, UINT32, UINT3
 
 STATIC VOID DrawString (UINT32 X, UINT32 Y, CONST CHAR8 *Str, UINT32 Color);
 
+STATIC VOID DrawString (UINT32 X, UINT32 Y, CONST CHAR8 *Str, UINT32 Color);
+
+/** 帧缓冲是 cacheable 的：少量分散写留在缓存里屏幕看不到，按缓存行回扫推上去 */
+STATIC
+VOID
+SweepFb (
+  VOID
+  )
+{
+  volatile UINT32  *Pix;
+  UINTN             Count;
+  UINTN             k;
+
+  if (mFb == NULL || mFbSize < 4) {
+    return;
+  }
+  Pix   = (volatile UINT32 *)mFb;
+  Count = mFbSize / 4;
+  for (k = 0; k < Count; k += 16) {
+    Pix[k] = Pix[k];
+  }
+}
+
 /* EBS 之后 ConOut 已经没了，日志用自己的点阵字体画到屏幕 */
 STATIC UINT32  mLogY;
 
