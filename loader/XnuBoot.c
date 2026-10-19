@@ -39,7 +39,11 @@ XnuPayloadSize (
   VOID
   )
 {
-  return (UINTN)(gXnuPayloadEnd - gXnuPayload);
+  UINTN  N;
+
+  N = (UINTN)(gXnuPayloadEnd - gXnuPayload);
+  /* 占位 .S 可能残留几个字节；小于段表偏移的都当作没有内嵌 */
+  return (N < 0x300) ? 0 : N;
 }
 
 /** 返回内嵌 payload 的地址 */
