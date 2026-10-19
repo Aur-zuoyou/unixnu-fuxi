@@ -27,6 +27,7 @@
 
 extern UINTN        XnuPayloadSize (VOID);
 extern CONST VOID  *XnuPayloadAddr (VOID);
+extern UINT32       XnuMmuInstall (UINTN WbLo, UINTN WbHi);
 extern UINT32       XnuPickPhysRegion (VOID (*Log)(CONST CHAR8 *, UINT64));
 extern EFI_STATUS   XnuLoadFromFv (VOID **Buf, UINTN *Size,
                                    VOID (*Log)(CONST CHAR8 *, UINT64));
@@ -899,9 +900,12 @@ OnTextOut (
       /* 退出成功: 优先启动 XNU payload；找不到就停在诊断画面（不退回 M5，
          否则 M5 会 Fill 整屏把我们上面的诊断信息擦掉） */
       if (mXnuBufSize > 0 || XnuPayloadSize () > 0) {
+        /* 接管 MMU：自己建恒等映射，之后 4GB 以上也能访问 */
+        XnuMmuInstall (0, 0);
         Fill (0xFF000000);
         mLogY = 40;
         XnuScreenLog ("EBS OK", (mXnuBufSize > 0) ? mXnuBufSize : XnuPayloadSize ());
+        XnuScreenLog ("MMU OWN", 1);
         XnuBootRun ((mXnuBufSize > 0) ? mXnuBuf : XnuPayloadAddr (),
                     (mXnuBufSize > 0) ? mXnuBufSize : XnuPayloadSize (),
                     (UINTN) mFb, (UINTN) mFbPitch, mFbW, mFbH, XnuScreenLog);

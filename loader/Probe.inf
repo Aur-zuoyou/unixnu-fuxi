@@ -15,6 +15,7 @@
   XnuBoot.c
   XnuLoad.c
   XnuMem.c
+  XnuMmu.c
   XnuFv.c
   XnuUfs.c
   xnu_jump.S
