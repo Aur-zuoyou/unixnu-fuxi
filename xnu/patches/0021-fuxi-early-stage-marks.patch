@@ -1,0 +1,37 @@
+diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
+--- a/osfmk/arm64/start.s
++++ b/osfmk/arm64/start.s
+@@ -344,5 +344,16 @@
+ 	// Convert lr to KVA
+ 	add		lr, lr, x22
+ 	sub		lr, lr, x23
++	/* fuxi: 页表建完，即将进 common_start */
++	MOV64	x9, 0xB0000000
++	MOV64	x12, 0x24EA00
++	add	x9, x9, x12
++	MOV64	x10, 0x00FF00FF
++	MOV64	x11, 8640
++	1:
++	str	w10, [x9], #4
++		subs	x11, x11, #1
++		b.ne	1b
++	dsb	sy
+ 
+ 	b		common_start
+@@ -459,5 +459,16 @@
+ 	// Unlock the core for debugging
+ 	msr		OSLAR_EL1, xzr
+ 	msr		DAIFSet, #(DAIFSC_ALL)				// Disable all interrupts
++	/* fuxi: 进入 start_first_cpu */
++	MOV64	x9, 0xB0000000
++	MOV64	x12, 0x20F580
++	add	x9, x9, x12
++	MOV64	x10, 0x0000FFFF
++	MOV64	x11, 8640
++	1:
++	str	w10, [x9], #4
++		subs	x11, x11, #1
++		b.ne	1b
++	dsb	sy
+ 
+ 	mov		x20, x0
