@@ -13,6 +13,7 @@
 #include <Uefi.h>
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/BaseMemoryLib.h>
+#include <Library/MemoryAllocationLib.h>   /* AllocatePool / FreePool */
 
 #define ADT_OLD_BASE  0x100000000ULL
 #define ADT_OLD_SIZE  0xfcc00000ULL
