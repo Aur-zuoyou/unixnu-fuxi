@@ -16,6 +16,8 @@
 #include <Library/BaseMemoryLib.h>
 #include <Protocol/FirmwareVolume2.h>
 
+typedef VOID (*XNU_LOG_FN)(CONST CHAR8 *Tag, UINT64 Value);
+
 /* 与 FDF 里 FILE FREEFORM 的 GUID 保持一致 */
 STATIC EFI_GUID  mXnuPayloadGuid = {
   0x9f3c7a21, 0x5b4e, 0x4c8d, { 0x9a, 0x11, 0x7e, 0x2b, 0x63, 0x08, 0xd4, 0x51 }
