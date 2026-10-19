@@ -261,6 +261,14 @@ jobs:
           grep -n -B2 -A8 "start.s" "$OBJ/osfmk/RELEASE/Makefile" 2>/dev/null | head -40 || true
 
 
+      - name: 分析未定义符号（定位是哪些文件没参与编译）
+        if: always()
+        run: |
+          exec > >(tee -a undef.log) 2>&1
+          set -x
+          python3 "$GITHUB_WORKSPACE/tools/analyze_undef.py" build.log xnu 2>&1 | head -120
+
+
       - name: 打包产物
         if: always()
         run: |
@@ -301,6 +309,7 @@ jobs:
             build.log
             pack.log
             startup.log
+            undef.log
             tunables.log
             genfiles.log
             asflags.log
