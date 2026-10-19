@@ -140,6 +140,33 @@ jobs:
           git clone --depth 1 https://github.com/alephsecurity/xnu-qemu-arm64.git 2>/dev/null || true
           find xnu-qemu-arm64/hw -iname "*xnu*" -o -iname "*apple*" 2>/dev/null | head -20 || true
 
+      - name: 补老版本工具链（xnu-6153 时代依赖 cctools 的 CTF 工具）
+        if: always()
+        run: |
+          set +e
+          exec > >(tee -a oldtool.log) 2>&1
+          set -x
+          mkdir -p "$HOME/bin"
+
+          # Xcode 15 已经没有 ctfconvert / ctfmerge（CTF 调试信息转换工具）。
+          # 我们只要内核镜像，不需要 CTF，所以造两个空壳。
+          for t in ctfconvert ctfmerge ctfdump; do
+            printf '#!/bin/sh\nexit 0\n' > "$HOME/bin/$t"
+            chmod +x "$HOME/bin/$t"
+          done
+          ls -l "$HOME/bin"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+          # 老 Makefile 靠这些变量拼 -arch，空值会变成 "-arch -mmacosx-version-min=..."
+          echo "RC_ARCHS=arm64" >> "$GITHUB_ENV"
+          echo "ARCHS=arm64" >> "$GITHUB_ENV"
+          echo "KERNEL_ARCHS=arm64" >> "$GITHUB_ENV"
+
+          echo "=== PATH 现在有 ==="
+          echo "$PATH"
+          echo "=== 试试 ctfconvert ==="
+          "$HOME/bin/ctfconvert" --version; echo "退出码 $?"
+
       - name: 去掉 -Werror（clang 15 比 xnu-8792 当年更严格）
         run: |
           exec > >(tee -a werror.log) 2>&1
@@ -215,7 +242,7 @@ jobs:
           set -x
           cd xnu
           NCPU=$(sysctl -n hw.ncpu)
-          MAKE="make -j$NCPU ARCH_CONFIGS=ARM64 KERNEL_CONFIGS=RELEASE"
+          MAKE="make -j$NCPU ARCH_CONFIGS=ARM64 KERNEL_CONFIGS=RELEASE ARCHS=arm64 RC_ARCHS=arm64"
 
           echo "########## pass 1 ##########"
           $MAKE > pass1.log 2>&1
@@ -262,6 +289,8 @@ jobs:
             fi
           done
           tail -25 pass3.log
+          echo "=== -db / Command not found 的上下文 ==="
+          grep -n -B3 -A3 "Command not found" pass3.log 2>/dev/null | head -30 || true
 
           # ---- 未定义符号 → 空实现 ----
           echo "########## 生成空实现 ##########"
@@ -376,6 +405,7 @@ jobs:
           name: xnu-build-${{ github.run_number }}
           path: |
             env.log
+            oldtool.log
             xnu-tag.txt
             fetch.log
             fixup.log
