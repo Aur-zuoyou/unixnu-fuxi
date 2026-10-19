@@ -19,6 +19,9 @@ on:
       - ".github/workflows/build-fuxi-uefi.yml"
   workflow_dispatch:
 
+env:
+  PAYLOAD_ENABLED: "off"   # 诊断: off=不嵌 XNU
+
 permissions:
   contents: read
   actions: read   # 读其它 workflow 的产物
@@ -73,6 +76,13 @@ jobs:
           exec > >(tee -a xnu-payload.log) 2>&1
           set -x
           mkdir -p rom/xnu
+
+          # 诊断开关：设为 off 时完全不嵌入 XNU，用来区分"模块太大导致的崩溃"
+          if [ "${PAYLOAD_ENABLED:-on}" = "off" ]; then
+            echo "PAYLOAD_ENABLED=off，跳过 XNU 嵌入（保持占位）"
+            cp xnu-payload.log ../xnu-payload.log 2>/dev/null || true
+            exit 0
+          fi
 
           echo "=== 找最新的 xnu-kernel 产物 ==="
           API="https://api.github.com/repos/${{ github.repository }}/actions/artifacts?per_page=100"
@@ -283,6 +293,16 @@ jobs:
           echo
           echo "### diag 结束"
 
+          echo '=== 导出 Probe.efi 并反汇编 ==='
+          PROBE=$(find edk2-msm/workspace -name 'Probe.efi' -type f | head -1)
+          echo "Probe.efi: [$PROBE]"
+          if [ -n "$PROBE" ]; then
+            cp "$PROBE" . 2>/dev/null || true
+            ls -l Probe.efi 2>/dev/null || true
+            (aarch64-linux-gnu-objdump -d "$PROBE" | head -4000 > probe.dis) 2>/dev/null || true
+            ls -l probe.dis 2>/dev/null || true
+          fi
+
       - name: 写 version.txt（这个产物对应哪个提交、补丁是否打上）
         run: |
           PATCH=$(python3 tools/patch_firmware.py edk2-msm | tail -1)
@@ -312,5 +332,7 @@ jobs:
             edk2-msm/diag.txt
             edk2-msm/version.txt
             build.log
+            probe.dis
+            Probe.efi
             xnu-payload.log
           if-no-files-found: warn
