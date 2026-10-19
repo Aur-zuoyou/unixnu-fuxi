@@ -261,9 +261,7 @@ jobs:
               if [ -n "$BADFILE" ] && [ -f "$BADFILE" ]; then
                 REL=$(echo "$BADFILE" | sed "s|$PWD/||")
                 if ! grep -q "fuxi_decls.h" "$REL"; then
-                  sed -i "" "1i\\
-#include <arm64/fuxi_decls.h>
-" "$REL"
+                  sed -i '' "1i #include <arm64/fuxi_decls.h>" "$REL"
                   echo "已把 fuxi_decls.h 注入 $REL"
                 fi
               fi
