@@ -13,7 +13,9 @@
 **/
 
 #include <Uefi.h>
-#include <Library/BaseMemoryLib.h>
+#include <Library/BaseLib.h>              /* AsciiStrLen / AsciiStrCmp */
+#include <Library/BaseMemoryLib.h>        /* ZeroMem */
+#include <Library/MemoryAllocationLib.h>  /* AllocatePool / FreePool */
 
 #define UFS_BASE     0x01d84000UL
 
