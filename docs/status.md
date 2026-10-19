@@ -117,3 +117,41 @@
 1. 验证 32MB 对齐后蓝带是否出现（MMU 能否打开）
 2. 蓝带通过 → 把标记推进到 `arm_init` / `PE_init_platform`
 3. 内核能自己打印（`fuxi_early_mark`）→ **M7 达成**
+
+---
+
+## 明天（2026-10-20）从这里开始
+
+### 自动在跑的东西
+
+`
+xnu 补丁变 → build-xnu（macOS，约 8 分钟）
+          → 完成后自动触发 build-fuxi-uefi（workflow_run）
+          → 产出 fuxi-uefi-N.zip（含 boot-fuxi.img，内核从最新 xnu-kernel 产物取）
+`
+
+所以只需要：**明天打开 Actions，下载最新的 fuxi-uefi-N.zip**，然后刷。
+
+### 昨晚最后一版改了什么（commit 2f30e94）
+
+| 改动 | 原因 |
+|---|---|
+| 删除 0020（蓝色标记补丁） | 它一直 apply 失败，从来没生效过 |
+| 0021 的黄色标记移到 start_first_cpu 第一条指令 | 原来插在 msr OSLAR_EL1, xzr 之后；OSLAR_EL1 是 Apple 专有寄存器，在骁龙上可能 UNDEF，标记永远执行不到 |
+
+### 刷机后怎么判读（三种颜色 = 三个检查点）
+
+| 屏幕 | 说明 | 下一步 |
+|---|---|---|
+| 黄带 y=500 | 进入 start_first_cpu（OSLAR 那条过去了） | 看品红 |
+| 黄 + 品红 y=560 | 页表建完，即将进 common_start | 死在 MMU 使能（TCR/TTBR/SCTLR） |
+| 再看有没有英文字 | 内核自己的 uxi_early_mark 开始打印 | **M7 达成** |
+
+- 只有黄 → 死在 start_first_cpu 中段（VBAR/栈/读 boot_args/建页表）
+- 黄+品红、无字 → 死在 common_start，重点查 sysreg_restore 里的 TCR 值是否适合高通（Apple 用 16K 页，TCR 可能带 Apple 专属位）
+
+### 已知待办
+
+1. 蓝带标记需要重新做一个（0020 失败了），等黄/品红确认后再加
+2. ADT 用的 om/xnu/fuxi.adt（来自 kalama.adt）：节点名已改 fuxi-*，dram 锚点已改
+3. ADT PATCHED 只报了 1（预期 2），说明 dram-size 没匹配上——需要在 XnuMem.c 里补上 kalama.adt 用的 size 值，或者改成按属性名定位而不是按值替换
