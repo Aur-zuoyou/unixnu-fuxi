@@ -35,69 +35,35 @@ XnuPickPhysRegion (
   IN  XNU_LOG_FN2  Log
   )
 {
-  EFI_STATUS             Status;
-  UINTN                  Size = 0;
-  UINTN                  MapKey;
-  UINTN                  DescSize = 0;
-  UINT32                 DescVer = 0;
-  EFI_MEMORY_DESCRIPTOR  *Map;
-  UINTN                  Count;
-  UINTN                  I;
-  UINT64                 BestSize = 0;
-  UINT64                 BestBase = 0;
+  EFI_STATUS            Status;
+  EFI_PHYSICAL_ADDRESS  Pages = 0;
+  UINTN                 Want;
+  UINT64                End;
 
   mXnuPhysBase = 0;
   mXnuPhysSize = 0;
 
-  Status = gBS->GetMemoryMap (&Size, NULL, &MapKey, &DescSize, &DescVer);
-  if (Status != EFI_BUFFER_TOO_SMALL) {
-    return 2;
-  }
-  Size += 4 * DescSize;
-  Map   = AllocatePool (Size);
-  if (Map == NULL) {
-    return 3;
-  }
-  if (EFI_ERROR (gBS->GetMemoryMap (&Size, Map, &MapKey, &DescSize, &DescVer))) {
-    FreePool (Map);
-    return 4;
-  }
-
-  Count = Size / DescSize;
-  for (I = 0; I < Count; I++) {
-    EFI_MEMORY_DESCRIPTOR  *D = (EFI_MEMORY_DESCRIPTOR *)((UINT8 *)Map + I * DescSize);
-    UINT64                 Bytes;
-
-    if (D->Type != EfiConventionalMemory) {
-      continue;
-    }
-    Bytes = (UINT64)D->NumberOfPages * 4096ULL;
-    if (Bytes < NEED_BYTES) {
-      continue;
-    }
-    /* 只考虑整块都在 4GB 以下的内存：UEFI 的页表很可能只映射了前 4GB，
-       选到 4GB 以上会触发 external abort（实测过） */
-    if (D->PhysicalStart + Bytes > 0x100000000ULL) {
-      continue;
-    }
-    if ((D->PhysicalStart > BestBase) || (BestBase == 0)) {
-      BestBase = D->PhysicalStart;
-      BestSize = Bytes;
-    }
-  }
-
-  FreePool (Map);
-
-  if (BestBase == 0) {
+  /* 让 UEFI 直接分配：分配到的内存一定是映射好、可写的。
+     内核 + ADT + boot_args 大约需要 32MB，这里按 48MB 申请。 */
+  Want = NEED_BYTES / EFI_PAGE_SIZE;
+  Status = gBS->AllocatePages (AllocateAnyPages, EfiLoaderData, Want, &Pages);
+  if (EFI_ERROR (Status)) {
     if (Log != NULL) {
-      Log ("NO RAM", 0);
+      Log ("ALLOC PAGES FAIL", (UINT64)Status);
     }
     return 1;
   }
 
-  /* 对齐到 2MB，大小取整到 2MB */
-  mXnuPhysBase = (BestBase + 0x1FFFFFULL) & ~0x1FFFFFULL;
-  mXnuPhysSize = (BestSize - (mXnuPhysBase - BestBase)) & ~0x1FFFFFULL;
+  mXnuPhysBase = (UINT64)Pages;
+
+  /* 告诉 XNU 的 dram 窗口：从这块开始，一直到 4GB（UEFI 大概只映射到这里） */
+  End = 0x100000000ULL;
+  if (End <= mXnuPhysBase + NEED_BYTES) {
+    mXnuPhysSize = NEED_BYTES;
+  } else {
+    mXnuPhysSize = End - mXnuPhysBase;
+  }
+  mXnuPhysSize &= ~0x1FFFFFULL;
 
   if (Log != NULL) {
     Log ("PHYS PICKED", mXnuPhysBase);
