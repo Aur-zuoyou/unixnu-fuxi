@@ -1,17 +1,23 @@
 diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 --- a/osfmk/arm64/start.s
 +++ b/osfmk/arm64/start.s
-@@ -219,7 +219,13 @@
+@@ -219,7 +219,19 @@
   */
  	.align	3
  	.globl EXT(_start)
  LEXT(_start)
 +
-+	/* fuxi: 证明内核代码被执行——往帧缓冲左上角写一个绿色像素 */
-+	/* MMU 未开，x0 = boot_args 不能动，用 x9/x10 */
++	/* fuxi: 证明内核代码被执行——在 y=300 处画一条 16 行高的绿色色带 */
++	/* MMU 未开，直接写物理帧缓冲；x0 = boot_args 不能动 */
 +	MOV64	x9, 0xB0000000
-+	MOV64	x10, 0x0000FF00
-+	str	w10, [x9]
++	MOV64	x12, 0x13C800		// 300 * 4320（stride）
++	add	x9, x9, x12
++	MOV64	x10, 0x0000FF00		// 绿
++	MOV64	x11, 17280		// 16 行 * 1080 像素
++	1:
++	str	w10, [x9], #4
++		subs	x11, x11, #1
++		b.ne	1b
  	b	EXT(start_first_cpu)
  
  
