@@ -165,25 +165,38 @@ jobs:
           grep -rn "kernelsupport" makedefs 2>/dev/null | head -5 || true
           cd ..
 
-      - name: 构建 XNU（两段式）
+      - name: 构建 XNU（先编一遍 → 手工汇编 start.o → 再增量编）
         run: |
           exec > >(tee -a build.log) 2>&1
           set -x
           cd xnu
           NCPU=$(sysctl -n hw.ncpu)
+          OBJ=BUILD/obj/RELEASE_ARM64_VMAPPLE
+
           echo "=== pass 1 ==="
           make -j"$NCPU" ARCH_CONFIGS=ARM64 KERNEL_CONFIGS=RELEASE || true
-          echo "=== patch generated makefiles ==="
-          EXPORT="$PWD/BUILD/obj/RELEASE_ARM64_VMAPPLE/EXPORT_HDRS"
-          for mk in $(find BUILD -path "*osfmk*/RELEASE/Makefile" 2>/dev/null); do
-            printf "\nASFLAGS += -I%s/osfmk -I%s -I%s -I%s\n" "$PWD" "$PWD" "$PWD/EXTERNAL_HEADERS" "$EXPORT" >> "$mk"
-            echo "patched $mk"
-          done
-          echo "=== pass 2 ==="
+
+          MK="$OBJ/osfmk/RELEASE/Makefile"
+          echo "=== start.o 的编译规则 ==="
+          grep -n -A10 "start.o" "$MK" | head -40 || true
+          echo "=== 对照 bcopy.o 的规则 ==="
+          grep -n -A10 "bcopy.o" "$MK" | head -40 || true
+
+          echo "=== 手工汇编 start.o ==="
+          mkdir -p "$OBJ/osfmk/arm64"
+          clang -c -o "$OBJ/osfmk/arm64/start.o" osfmk/arm64/start.s \
+            -I. -Iosfmk -Ibsd -Iosfmk/arm64 \
+            -I"$OBJ/EXPORT_HDRS" -I"$OBJ/osfmk/RELEASE" -I"$OBJ" \
+            -DARM64=1 -DKERNEL=1 -DPRIVATE=1 -DXNU_TARGET_OS_OSX=1 2>&1 | head -40 || true
+          ls -l "$OBJ/osfmk/arm64/start.o" || echo "start.o 仍未生成"
+          nm "$OBJ/osfmk/arm64/start.o" 2>/dev/null | grep -i "__start" | head -3 || true
+
+          echo "=== pass 2（make 应跳过已存在的 start.o）==="
           make -j"$NCPU" ARCH_CONFIGS=ARM64 KERNEL_CONFIGS=RELEASE || true
-          echo "=== output ==="
-          find BUILD -name "start.o" | head -3
-          find BUILD -maxdepth 4 -type f \( -name "kernel*" -o -name "*.t?" \) | head -20
+
+          echo "=== 产出物 ==="
+          find BUILD -maxdepth 5 -type f -name "kernel*" | head -20
+          ls -lh "$OBJ"/kernel* 2>/dev/null || true
 
       - name: 诊断 config 的 tag 与 arm64 汇编的归属
         if: always()
