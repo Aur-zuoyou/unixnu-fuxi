@@ -323,6 +323,14 @@ XnuBootRun (
     for (k = 0; k < Pixels; k++) {
       Fb[k] = 0xFFFF00FFU;
     }
+
+    /*
+     * 关键：帧缓冲是可缓存映射，刚写的这批还在 cache 里（脏）。
+     * 先回写到显存、再作废这些行，否则内核（关 MMU 后直接写 DRAM）
+     * 画的颜色会被这些迟到逐出的脏行盖回品红。
+     */
+    AsmXnuDcacheCleanRange ((UINTN)FbBase, (UINTN)FbBase + Pixels * 4);
+    AsmXnuDcacheInvalidateRange ((UINTN)FbBase, (UINTN)FbBase + Pixels * 4);
     if (Log != NULL) {
       Log ("JUMPING", EntryVa + PaOfVa);
     }
