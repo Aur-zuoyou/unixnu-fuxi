@@ -7,10 +7,10 @@ diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
  	sub		lr, lr, x23
 +	/* fuxi: 页表建完，即将进 common_start */
 +	MOV64	x9, 0xB0000000
-+	MOV64	x12, 0x24EA00
++	MOV64	x12, 0x41EB00
 +	add	x9, x9, x12
 +	MOV64	x10, 0x00FF00FF
-+	MOV64	x11, 8640
++	MOV64	x11, 17280
 +	1:
 +	str	w10, [x9], #4
 +		subs	x11, x11, #1
@@ -20,12 +20,12 @@ diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
  	b		common_start
 @@ -457,3 +457,14 @@
  LEXT(start_first_cpu)
-+	/* fuxi: 进入 start_first_cpu（OSLAR 之前） */
++	/* fuxi: 进入 start_first_cpu */
 +	MOV64	x9, 0xB0000000
-+	MOV64	x12, 0x20F580
++	MOV64	x12, 0x3B5380
 +	add	x9, x9, x12
 +	MOV64	x10, 0x0000FFFF
-+	MOV64	x11, 8640
++	MOV64	x11, 17280
 +	1:
 +	str	w10, [x9], #4
 +		subs	x11, x11, #1
