@@ -133,8 +133,16 @@ def main() -> int:
     base, _ = mp.build(KERNEL, ADT, "debug=0xc serial=3 cpus=1 keepsyms=1 -v kdp_match_name=none")
     p = parse_payload(base)
     text_va = p["segs"][0]["vmaddr"]
-    region_lo = align(p["virt_base"])
-    print(f"   virt_base=0x{p['virt_base']:x} __TEXT=0x{text_va:x} kext 区 {(text_va - region_lo)/1048576:.1f} MB")
+
+    # 关键：预链接内核的 virt_base 必须取"最低段的 VA"（UniXNU 的 DarwinBoot 就是这样：
+    # pa = window_base + (entry - Kernel.Base)）。内核为 kexts 预留的 48MB 区
+    # 就在 __PRELINK_TEXT 占位地址到 __TEXT 之间，只有让 virt_base 落到那里，
+    # shim 才会把组件拷贝进去。
+    knative = tolerant_macho(io.open(KERNEL, "rb").read())
+    pre_placeholder = next(s for s in knative["segments"] if s["name"] == "__PRELINK_TEXT")["va"]
+    region_lo = pre_placeholder
+    out_virt_base = region_lo & ~0x1FFFFFF        # 32MB 对齐
+    print(f"   组件区从 0x{region_lo:x} 到 __TEXT 0x{text_va:x}（{(text_va - region_lo)/1048576:.1f} MB），virt_base 输出为 0x{out_virt_base:x}")
 
     print("② 规划")
     kc = load_kc()
@@ -215,7 +223,7 @@ def main() -> int:
     out += b"\0" * (-len(out) & 0xF)
 
     struct.pack_into("<8sII", out, 0, b"FUXIXNU", 1, len(pieces))
-    struct.pack_into("<7Q", out, 0x10, p["virt_base"], p["entry"], adt_off, p["adt_size"],
+    struct.pack_into("<7Q", out, 0x10, out_virt_base, p["entry"], adt_off, p["adt_size"],
                      kernel_end, p["phys_base"], p["mem_size"])
     cl = p["cmdline"].encode()[:607]
     out[0x48:0x48 + len(cl)] = cl
