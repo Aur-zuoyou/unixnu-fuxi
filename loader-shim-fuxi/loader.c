@@ -125,13 +125,26 @@ const char *loader_boot(uintptr_t dtb)
 		return "bad payload header";
 
 	/*
-	 * phys_base 直接采用 payload 头里的值（mkpayload 从 ADT 的 dram-base 读，
-	 * 现在 fuxi.adt 的 dram-base=0x42000000，与 qemu.adt 一致——QEMU 已验证
-	 * phys_base 与 ADT 一致时 XNU 能跑到底）。真机 0x42000000 位于低 4GB、可访问，
-	 * 与内核加载地址一致 → 不触发 phys_base 错位导致的 tpidr panic。
+	 * 窗口选择照 UniXNU DarwinBoot 的 AllocateWindow：从 ABL 的 memory map
+	 * 里找最大的连续可用段，而不是写死 phys_base。真机上 4GB 内的 RAM 被
+	 * Gunyah 切成多段，写死的 0x90000000+64MB 会越过实际可用区间，
+	 * XNU 建 physmap 时就会踩到未映射地址。
 	 */
 	uint64_t phys_base = p->phys_base;
 	uint64_t mem_size  = p->mem_size;
+
+	{
+		uint64_t need = (p->kernel_end - p->virt_base) + p->adt_size + 3 * PAGE_16K;
+		uint64_t pick_base = 0, pick_size = 0;
+
+		if (shim_pick_window(dtb, need, p->virt_base, &pick_base, &pick_size)) {
+			phys_base = pick_base;
+			mem_size = pick_size;
+			con_hex2("MEMWIN", "dyn base=", phys_base, "size=", mem_size);
+		} else {
+			con_hex2("MEMWIN", "fallback base=", phys_base, "size=", mem_size);
+		}
+	}
 
 	uint64_t pa_of_va_base = phys_base - p->virt_base;	/* pa = va + this */
 	con_hex2("PHYS", "base=", phys_base, "size=", mem_size);

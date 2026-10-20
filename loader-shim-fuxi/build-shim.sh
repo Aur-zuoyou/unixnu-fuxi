@@ -15,7 +15,7 @@ OUT=out-shim
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
-SRCS="start.S shim.c console.c mmu.c fdt.c loader.c ufs.c"
+SRCS="start.S shim.c console.c mmu.c fdt.c memmap.c loader.c ufs.c"
 
 echo "=== 编译 ==="
 for f in $SRCS; do
@@ -25,7 +25,7 @@ done
 
 echo "=== 链接 ==="
 $CC $CFLAGS -static -T shim.ld -Wl,--build-id=none -Wl,--no-warn-rwx-segments -Wl,-N \
-    "$OUT/start.o" "$OUT/shim.o" "$OUT/console.o" "$OUT/mmu.o" "$OUT/fdt.o" "$OUT/loader.o" "$OUT/ufs.o" \
+    "$OUT/start.o" "$OUT/shim.o" "$OUT/console.o" "$OUT/mmu.o" "$OUT/fdt.o" "$OUT/memmap.o" "$OUT/loader.o" "$OUT/ufs.o" \
     -o "$OUT/shim.elf"
 
 $OBJCOPY -O binary "$OUT/shim.elf" "$OUT/Image"
