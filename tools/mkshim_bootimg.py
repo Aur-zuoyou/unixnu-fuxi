@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
-"""打包 fuxi 的 boot image（header v1，page 2048 —— 与 edk2-msm 产出的官方镜像一致）。
+"""打包 fuxi 的 boot.img（header v1，page 2048，kernel 段 = gzip内核 + DTB）。
 
-fuxi(小米13) 的 ABL 只认这套参数：
-  page_size      = 2048
-  header_version = 1
-  kernel_addr    = 0x10000000
-  ramdisk_addr   = 0x20000000   （payload 放这里，ABL 会写进 /chosen linux,initrd-*）
-  tags_addr      = 0x10000000
+fuxi 的原厂/CI 镜像布局（实测）：
 
-布局：[header(page)][kernel][ramdisk]，每段按 page 对齐。
+    [header 2048][ gzip 内核 ][ DTB ][ 填充 ]
+                 └────── kernel_size 覆盖这一段 ──────┘
+
+ABL 在缺 DTB 时会拒绝启动，所以 DTB 必须跟在内核后面、算在 kernel_size 里。
 """
 
 import argparse
@@ -20,8 +18,7 @@ PAGE = 2048
 KERNEL_ADDR = 0x10000000
 RAMDISK_ADDR = 0x10000000
 TAGS_ADDR = 0x10000000
-OS_VERSION = 0x1A00016B   # 与 UEFI 镜像一致
-BOARD_NAME = b"\0" * 16   # 空名字（与 UEFI 镜像一致）
+OS_VERSION = 0x1A00016B
 
 
 def pad(data: bytes, page: int) -> bytes:
@@ -31,50 +28,50 @@ def pad(data: bytes, page: int) -> bytes:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--kernel", required=True)
-    ap.add_argument("--ramdisk", default="")
+    ap.add_argument("--kernel", required=True, help="gzip 压缩的内核 Image")
+    ap.add_argument("--dtb", required=True, help="设备树（跟在 gzip 后面）")
     ap.add_argument("--output", required=True)
     ap.add_argument("--cmdline", default="")
     a = ap.parse_args()
 
     kernel = open(a.kernel, "rb").read()
-    ramdisk = open(a.ramdisk, "rb").read() if a.ramdisk else b"\0"
+    dtb = open(a.dtb, "rb").read()
+
+    if kernel[:3] != b"\x1f\x8b\x08":
+        print("警告：内核不是 gzip，fuxi 的 ABL 可能不接受", file=sys.stderr)
+
+    region = pad(kernel + dtb, PAGE)
+    print(f"kernel     : {len(kernel):>10,} bytes (gzip)")
+    print(f"dtb        : {len(dtb):>10,} bytes")
+    print(f"kernel_size: {len(region):>10,} bytes（内核 + DTB + 填充）")
+
+    ramdisk = b"\0"
+    ident = hashlib.sha1(region + ramdisk).digest()
 
     cmdline = a.cmdline.encode() + b"\0"
-    name = BOARD_NAME.ljust(16, b"\0")
-
-    sha = hashlib.sha1()
-    sha.update(kernel)
-    sha.update(ramdisk)
-    ident = sha.digest() + b"\0" * (32 - 20)   # 32 字节，前 20 是 SHA1
-
     hdr = struct.pack(
         "<8s10I16s512s32s1024s",
         b"ANDROID!",
-        len(kernel),          # kernel_size
-        KERNEL_ADDR,          # kernel_addr
-        len(ramdisk),         # ramdisk_size
-        RAMDISK_ADDR,         # ramdisk_addr
-        0,                    # second_size
-        0,                    # second_addr（与 UEFI 镜像一致）
-        TAGS_ADDR,            # tags_addr
-        PAGE,                 # page_size
-        1,                    # header_version（fuxi 用 v1）
-        OS_VERSION,           # os_version
-        name,
+        len(region),
+        KERNEL_ADDR,
+        len(ramdisk),
+        RAMDISK_ADDR,
+        0,
+        0,
+        TAGS_ADDR,
+        PAGE,
+        1,
+        OS_VERSION,
+        b"\0" * 16,
         cmdline.ljust(512, b"\0"),
-        ident,                # id = SHA1(kernel+ramdisk)
-        b"\0" * 1024,         # extra_cmdline
+        ident + b"\0" * 12,
+        b"\0" * 1024,
     )
     hdr = hdr.ljust(PAGE, b"\0")
 
-    out = hdr + pad(kernel, PAGE) + pad(ramdisk, PAGE)
+    out = hdr + region + pad(ramdisk, PAGE)
     open(a.output, "wb").write(out)
-
-    print(f"kernel   : {len(kernel):>10,} bytes @ 0x{KERNEL_ADDR:x}")
-    print(f"ramdisk  : {len(ramdisk):>10,} bytes @ 0x{RAMDISK_ADDR:x}")
-    print(f"boot.img : {len(out):>10,} bytes -> {a.output}")
-    print(f"header   : v1, page {PAGE}")
+    print(f"boot.img   : {len(out):>10,} bytes -> {a.output}")
     return 0
 
 

@@ -47,8 +47,8 @@ jobs:
           ls -l loader-shim-fuxi/out-shim/Image.gz
           python3 tools/mkshim_bootimg.py \
             --kernel loader-shim-fuxi/out-shim/Image.gz \
-            --output boot-fuxi-shim.img \
-            --cmdline "console=null"
+            --dtb rom/device/fuxi_runtime.dtb \
+            --output boot-fuxi-shim.img
           ls -l boot-fuxi-shim.img
 
       - uses: actions/upload-artifact@v4
