@@ -116,6 +116,9 @@ def save_png(path, raw, w, h):
     open(path, "wb").write(png)
 
 
+SMP = 1
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("payload")
@@ -125,8 +128,12 @@ def main():
     ap.add_argument("--cpu", default="cortex-a76")
     ap.add_argument("--fb", type=lambda s: int(s, 0), default=FB_BASE_DEFAULT)
     ap.add_argument("--hmp", action="append", default=[])
+    ap.add_argument("--samples", type=int, default=3)
+    ap.add_argument("--smp", type=int, default=1)
     a = ap.parse_args()
 
+    global SMP
+    SMP = a.smp
     payload = open(a.payload, "rb").read()
     os.makedirs(a.outdir, exist_ok=True)
     out = os.path.abspath(a.outdir)
@@ -143,7 +150,7 @@ def main():
 
     serial = os.path.join(out, "serial.txt")
     cmd = [
-        QEMU, "-M", "virt,gic-version=3", "-cpu", a.cpu, "-smp", "1", "-m", f"{ram_gib}G",
+        QEMU, "-M", "virt,gic-version=3", "-cpu", a.cpu, "-smp", str(SMP), "-m", f"{ram_gib}G",
         "-nographic", "-serial", f"file:{serial}",
         "-qmp", f"tcp:127.0.0.1:{a.port},server,nowait",
         "-d", "int,guest_errors,unimp", "-D", os.path.join(out, "qemu.log"),
