@@ -16,7 +16,7 @@ sys.path.insert(0, r"E:\download\UniXNU\kits\NativePrelink")
 
 IPSW = r"E:\download\iPhone10,3,iPhone10,6_16.7.16_20H392_Restore.ipsw"
 ENTRY = "kernelcache.release.iphone10b"
-OURS = r"E:\download\xnu-kernel-21\out\kernel.development.fuxi"
+OURS = r"E:\download\xnu-kernel-22\out\kernel.development.fuxi"
 KC_KERNEL_OFF = 0x1C
 
 
