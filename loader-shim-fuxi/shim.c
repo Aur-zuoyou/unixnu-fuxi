@@ -377,13 +377,24 @@ void shim_main(uint64_t dtb)
 	/* An xnu payload in the ramdisk means: boot it (MMU stays off). */
 	stage = "loader";
 	con_clear(RED);
-	con_str("SHIM", "sweet milestone 4: xnu loader");
+	con_str("SHIM", "fuxi bare-metal xnu loader");
 	con_skip();
 	const char *why = loader_boot(dtb);
 	con_str("LOADER", why);
 	con_skip();
 
-	/* No payload: probe the internal UFS while the MMU is still off. */
+	/*
+	 * fuxi: 拿不到 payload 时不要探测 UFS——UFS 寄存器此刻多半未映射，
+	 * 访问会同步异常，设备直接重启回 fastboot，什么都看不到。
+	 * 停在屏幕上，让上面打印的错误信息留着。
+	 */
+	if (why != 0) {
+		con_str("HALT", "no payload, staying here");
+		for (;;) {
+			__asm__ volatile("wfi");
+		}
+	}
+
 	stage = "ufs";
 	test_ufs();
 	con_skip();
