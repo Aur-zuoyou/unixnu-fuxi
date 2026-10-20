@@ -28,7 +28,7 @@ done
 
 echo "=== 链接 ==="
 $CC $CFLAGS -static -T shim.ld -Wl,--build-id=none -Wl,--no-warn-rwx-segments -Wl,-N \
-    $OUT/start.o $OUT/shim.o $OUT/console.o $OUT/mmu.o $OUT/fdt.o $OUT/loader.o \
+    $OUT/start.o $OUT/shim.o $OUT/console.o $OUT/mmu.o $OUT/fdt.o $OUT/loader.o $OUT/ufs.o \
     -o "$OUT/shim.elf"
 
 $OBJCOPY -O binary "$OUT/shim.elf" "$OUT/Image"
