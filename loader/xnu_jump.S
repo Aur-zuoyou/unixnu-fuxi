@@ -29,6 +29,28 @@ AsmXnuDcacheCleanRange:
 .size   AsmXnuDcacheCleanRange, . - AsmXnuDcacheCleanRange
 
 // ---------------------------------------------------------------------------
+// void AsmXnuDcacheInvalidateRange(UINTN start, UINTN end)
+// 作废 D-cache 行（不写回）：用来强制后续读取走内存，验证清缓存是否有效
+// ---------------------------------------------------------------------------
+.global AsmXnuDcacheInvalidateRange
+.type   AsmXnuDcacheInvalidateRange, %function
+AsmXnuDcacheInvalidateRange:
+    mrs     x2, ctr_el0
+    ubfx    x3, x2, #16, #4
+    mov     x4, #4
+    lsl     x4, x4, x3
+    sub     x5, x4, #1
+    bic     x0, x0, x5
+4:
+    dc      ivac, x0
+    add     x0, x0, x4
+    cmp     x0, x1
+    b.lo    4b
+    dsb     sy
+    ret
+.size   AsmXnuDcacheInvalidateRange, . - AsmXnuDcacheInvalidateRange
+
+// ---------------------------------------------------------------------------
 // void AsmXnuJump(UINTN entry_pa, UINTN boot_args_pa)
 // ---------------------------------------------------------------------------
 .global AsmXnuJump

@@ -66,6 +66,12 @@ AsmXnuDcacheCleanRange (
   );
 
 VOID
+AsmXnuDcacheInvalidateRange (
+  IN UINTN  Start,
+  IN UINTN  End
+  );
+
+VOID
 AsmXnuJump (
   IN UINTN  EntryPa,
   IN UINTN  BootArgsPa
@@ -313,6 +319,15 @@ XnuBootRun (
     if (Log != NULL) {
       Log ("ENTRY PA", EntryPa);
       Log ("CODE@ENTRY", Head);
+
+      /* 自校验：作废内核区的 D-cache 行，再从内存重读同样的 8 字节 */
+      AsmXnuDcacheInvalidateRange ((UINTN)PhysBase, (UINTN)(KernelEnd + PaOfVa));
+      {
+        UINT64  Head2;
+
+        CopyMem (&Head2, (VOID *)(UINTN)EntryPa, 8);
+        Log ("CODE@MEM", Head2);
+      }
     }
   }
 
