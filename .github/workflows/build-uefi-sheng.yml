@@ -35,7 +35,7 @@ permissions:
   contents: read
 
 env:
-  UEFI_SRC_KEY: uefi-src-v3
+  UEFI_SRC_KEY: uefi-src-v4
 
 jobs:
   build:
@@ -54,44 +54,99 @@ jobs:
             uefi-sheng
           key: ${{ env.UEFI_SRC_KEY }}-${{ hashFiles('.github/workflows/build-uefi-sheng.yml') }}
 
-      - name: 克隆全部源码（缓存未命中时）
+      - name: 安装依赖
+        run: |
+          set -eux
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential uuid-dev iasl nasm python3 python3-pip \
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+            device-tree-compiler git-lfs clang llvm lld curl unzip
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r uefi-sheng/pip-requirements.txt || true
+          python3 -m pip install coloredlogs || true
+
+      # ── 复刻 build-uefi-sheng.sh 的环境，跳过 check-sheng.py ──
+      - name: 下载全部源码（zip 包，不用 git clone）
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
           set -eux
-          clone_retry() {
-            local dir="$1"; local url="$2"; shift 2
+          # GitHub 的 zip 包下载比 clone 更快也更可靠（不受 submodule / LFS / 浅克隆限制）
+          fetch_zip() {
+            local name="$1"; local url="$2"
             for attempt in 1 2 3; do
-              rm -rf "$dir"
-              if git clone "$@" "$url" "$dir"; then return 0; fi
-              echo "克隆 $url 失败（第 $attempt 次），重试…"
+              rm -rf "$name" "${name}.zip"
+              if curl -fsSL --retry 3 --retry-delay 10 -o "${name}.zip" "$url"; then
+                unzip -q "${name}.zip" && rm -f "${name}.zip"
+                return 0
+              fi
+              echo "下载 $name 失败（第 $attempt 次），重试…"
               sleep 20
             done
-            echo "克隆 $url 彻底失败"; return 1
+            echo "下载 $name 彻底失败"; return 1
           }
 
-          # 框架（提供 package/ 与 drivers/DarwinBoot）
-          # 优先用仓库自带的 vendor/UniXNU.tar.gz：上游 clone 下来的树里
-          # drivers/DarwinBoot/DarwinBootPkg 是空的，缺 DarwinBoot.inf。
+          # 框架（UniXNU）：用仓库自带的 vendor 包，最可靠
           if [ -f vendor/UniXNU.tar.gz ]; then
-            echo "使用仓库自带的 vendor/UniXNU.tar.gz"
+            echo "使用 vendor/UniXNU.tar.gz"
             tar -xzf vendor/UniXNU.tar.gz -C .
           else
-            echo "vendor 包不存在，回退到 git clone"
-            clone_retry UniXNU https://github.com/UniXNU/UniXNU.git --depth 1
+            echo "没有 vendor 包，下载 zip"
+            fetch_zip UniXNU-main https://github.com/UniXNU/UniXNU/archive/refs/heads/main.zip
+            mv UniXNU-main UniXNU
           fi
-          # 板级（board.toml / sheng_defconfig / scripts）
-          clone_retry UniXNU-sheng https://github.com/UniXNU/UniXNU-sheng.git --depth 1
-          # Mu-Silicium 的 SM8550 UEFI 端口（含 shengPkg）
-          clone_retry uefi-sheng   https://github.com/UniXNU/uefi-sheng.git --recursive
-          cd uefi-sheng
-          git submodule update --init --recursive
-          cd ..
+          ls UniXNU/drivers/DarwinBoot/DarwinBootPkg/Driver/DarwinBoot.inf
 
-          # Mu 基座：脚本里 EDK_TOOLS_PATH=$UNIXNU_ROOT/package/Mu_Basecore/BaseTools
+          # 板级
+          fetch_zip UniXNU-sheng-main https://github.com/UniXNU/UniXNU-sheng/archive/refs/heads/main.zip
+          mv UniXNU-sheng-main UniXNU-sheng
+
+          # Mu-Silicium 的 SM8550 UEFI 端口（含 shengPkg）
+          fetch_zip uefi-sheng-main https://github.com/UniXNU/uefi-sheng/archive/refs/heads/main.zip
+          mv uefi-sheng-main uefi-sheng
+          # zip 包不含 submodule，逐个下载
+          if [ -f uefi-sheng/.gitmodules ]; then
+            echo "处理 submodule…"
+            python3 - <<'PY'
+          import configparser, os, subprocess, sys, urllib.request
+          cfg = configparser.ConfigParser()
+          cfg.read('uefi-sheng/.gitmodules')
+          for sec in cfg.sections():
+              path = cfg.get(sec, 'path')
+              url = cfg.get(sec, 'url').rstrip('/')
+              if url.endswith('.git'):
+                  url = url[:-4]
+              branch = cfg.get(sec, 'branch', fallback='')
+              if branch and '/' in branch:
+                  # 形如 release/202608 或 commit hash
+                  pass
+              target = os.path.join('uefi-sheng', path)
+              os.makedirs(os.path.dirname(target) or '.', exist_ok=True)
+              import shutil
+              shutil.rmtree(target, ignore_errors=True)
+              zurl = f'{url}/archive/refs/heads/{branch}.zip' if branch else f'{url}/archive/refs/heads/main.zip'
+              print(f'  {path} <- {zurl}')
+              tmp = '/tmp/sub.zip'
+              try:
+                  urllib.request.urlretrieve(zurl, tmp)
+              except Exception as e:
+                  print(f'  下载失败 {zurl}: {e}')
+                  continue
+              subprocess.run(['unzip', '-q', tmp, '-d', '/tmp/subx'], check=True)
+              roots = os.listdir('/tmp/subx')
+              if roots:
+                  shutil.move(os.path.join('/tmp/subx', roots[0]), target)
+              shutil.rmtree('/tmp/subx', ignore_errors=True)
+          PY
+          fi
+          ls uefi-sheng/Platforms/Xiaomi/shengPkg | head
+
+          # Mu 基座：EDK_TOOLS_PATH 指向 UniXNU/package/Mu_Basecore/BaseTools
           mkdir -p UniXNU/package
-          clone_retry UniXNU/package/Mu_Basecore \
-            https://github.com/microsoft/mu_basecore.git \
-            --depth 1 --branch release/202608
+          fetch_zip mu_basecore-release-202608 \
+            https://github.com/microsoft/mu_basecore/archive/refs/heads/release/202608.zip
+          mv mu_basecore-release-202608 UniXNU/package/Mu_Basecore
+
           du -sh UniXNU UniXNU-sheng uefi-sheng UniXNU/package/Mu_Basecore
 
       # 缓存命中时也要保证关键路径存在（早期缓存的 key 可能不完整）
@@ -128,19 +183,6 @@ jobs:
             ls -d "$GITHUB_WORKSPACE/$d" || { echo "缺少 $d"; exit 1; }
           done
 
-      - name: 安装依赖
-        run: |
-          set -eux
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential uuid-dev iasl nasm python3 python3-pip \
-            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
-            device-tree-compiler git-lfs clang llvm lld
-          python3 -m pip install --upgrade pip
-          python3 -m pip install -r uefi-sheng/pip-requirements.txt || true
-          python3 -m pip install coloredlogs || true
-
-      # ── 复刻 build-uefi-sheng.sh 的环境，跳过 check-sheng.py ──
       - name: 准备 EDK2 BaseTools 与 Conf
         run: |
           set -eux
