@@ -1,25 +1,28 @@
 name: build-uefi-sheng
 
-# 目标：验证 uefi-sheng (Mu-Silicium) 的构建链路能否在 CI 上跑通。
+# 目标：用 UniXNU 的 uefi-sheng (Mu-Silicium) 编出 SM8550 的 UEFI 固件。
 #
-# 先只编 sheng（小米平板 6S Pro，SM8550，与我们的 fuxi 同 SoC）——
-# 这一步不改任何参数，纯粹确认工具链、submodule、依赖都没问题。
-# 通过之后再复制 shengPkg 改出 fuxiPkg。
+# 关键：不走 `build_uefi.py`（它经过 Mu 的 stuart 框架，其中的
+# OverrideValidation 插件在 CI 环境下会 normpath(None) 崩溃），
+# 而是照抄 UniXNU-sheng/scripts/build-uefi-sheng.sh 的环境变量，
+# 直接调用 EDK2 的 `build` 命令。
 #
-# 产物：SILICIUM_UEFI.fd（UEFI 固件卷）
+# 同时跳过该脚本里的 check-sheng.py（它要求从 sheng 官方固件提取的厂商
+# 二进制，我们拿不到）。SHENG_VENDOR_HW 因此是默认值 0，走通用驱动：
+# 面板保持常亮 + SimpleFbDxe 发布 GOP，足以验证引导链路。
+#
+# 产物：SILICIUM_UEFI.fd
 
 concurrency:
   group: uefi-sheng-${{ github.ref }}
   cancel-in-progress: true
 
 on:
-  # 推送 + 定时都能自动跑，不需要人工点 Run workflow
   push:
     paths:
       - "xnu/uefi/**"
       - ".github/workflows/build-uefi-sheng.yml"
   schedule:
-    # 每 6 小时试一次，用于自动重试（Mu-Silicium 的 submodule 拉取偶发失败）
     - cron: "0 */6 * * *"
   workflow_dispatch:
     inputs:
@@ -31,132 +34,141 @@ on:
 permissions:
   contents: read
 
+env:
+  UEFI_SRC_KEY: uefi-src-v2
+
 jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
 
     steps:
-      # ── 缓存：把 ~5GB 的源码树整体缓存，第二次以后只做增量 ──
-      - name: 恢复源码树缓存
-        id: src-cache
-        uses: actions/cache@v4
-        with:
-          path: uefi-sheng
-          key: uefi-sheng-src-${{ hashFiles('.github/workflows/build-uefi-sheng.yml') }}
-
-      - name: 克隆 uefi-sheng（缓存未命中时）
-        if: steps.src-cache.outputs.cache-hit != 'true'
-        run: |
-          set -x
-          # 注意：不能用 --depth 1。Mu 的 OverrideValidation 插件会用 git 取
-          # 「变更文件列表」，浅克隆拿不到父提交 → filepath 为 None →
-          # normpath(None) 崩溃。这里要完整克隆。
-          for attempt in 1 2 3; do
-            rm -rf uefi-sheng
-            if git clone --recursive \
-                 https://github.com/UniXNU/uefi-sheng.git uefi-sheng; then
-              echo "克隆成功（第 $attempt 次）"
-              break
-            fi
-            echo "克隆失败（第 $attempt 次），重试…"
-            sleep 20
-          done
-          cd uefi-sheng
-          git submodule update --init --recursive
-          # 至少有两个提交，插件才能算出变更列表
-          git log --oneline | head -5
-          du -sh .
-          ls
-
-      # shengPkg/DeviceBuild.py 要求 UNIXNU_ROOT/package 存在（默认找 ../UniXNU/package）
-      - name: 克隆 UniXNU 框架（固件构建需要它的 package）
-        run: |
-          set -x
-          for attempt in 1 2 3; do
-            if [ -d UniXNU/package ]; then
-              echo "UniXNU 已存在"
-              break
-            fi
-            rm -rf UniXNU
-            if git clone --depth 1 https://github.com/UniXNU/UniXNU.git UniXNU; then
-              echo "UniXNU 克隆成功（第 $attempt 次）"
-              break
-            fi
-            echo "UniXNU 克隆失败（第 $attempt 次），重试…"
-            sleep 15
-          done
-          ls -ld UniXNU/package
-          du -sh UniXNU
-
-      - name: 缓存命中确认
-        if: steps.src-cache.outputs.cache-hit == 'true'
-        run: |
-          echo "源码树来自缓存，跳过克隆"
-          du -sh uefi-sheng
-          ls uefi-sheng | head
-
-      # ── 缓存：EDK2 的 BaseTools 与 Build 输出 ──
-      - name: 恢复构建输出缓存
-        id: build-cache
+      # ── 缓存整棵源码树（约 5GB），命中后跳过所有克隆 ──
+      - name: 恢复源码缓存
+        id: cache
         uses: actions/cache@v4
         with:
           path: |
-            uefi-sheng/Build
-            uefi-sheng/Conf
-          key: uefi-sheng-build-${{ hashFiles('.github/workflows/build-uefi-sheng.yml') }}-${{ github.run_id }}
-          restore-keys: |
-            uefi-sheng-build-${{ hashFiles('.github/workflows/build-uefi-sheng.yml') }}-
+            UniXNU
+            UniXNU-sheng
+            uefi-sheng
+            Mu_Basecore
+          key: ${{ env.UEFI_SRC_KEY }}-${{ hashFiles('.github/workflows/build-uefi-sheng.yml') }}
+
+      - name: 克隆全部源码（缓存未命中时）
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          set -eux
+          clone_retry() {
+            local dir="$1"; local url="$2"; shift 2
+            for attempt in 1 2 3; do
+              rm -rf "$dir"
+              if git clone "$@" "$url" "$dir"; then return 0; fi
+              echo "克隆 $url 失败（第 $attempt 次），重试…"
+              sleep 20
+            done
+            echo "克隆 $url 彻底失败"; return 1
+          }
+
+          # 框架（提供 package/ 与 drivers/DarwinBoot）
+          clone_retry UniXNU       https://github.com/UniXNU/UniXNU.git --depth 1
+          # 板级（board.toml / sheng_defconfig / scripts）
+          clone_retry UniXNU-sheng https://github.com/UniXNU/UniXNU-sheng.git --depth 1
+          # Mu-Silicium 的 SM8550 UEFI 端口（含 shengPkg）
+          clone_retry uefi-sheng   https://github.com/UniXNU/uefi-sheng.git --recursive
+          cd uefi-sheng
+          git submodule update --init --recursive
+          cd ..
+
+          # Mu 基座：脚本里 EDK_TOOLS_PATH=$UNIXNU_ROOT/package/Mu_Basecore/BaseTools
+          clone_retry Mu_Basecore  https://github.com/microsoft/mu_basecore.git \
+            --depth 1 --branch release/202608
+          du -sh UniXNU UniXNU-sheng uefi-sheng Mu_Basecore
 
       - name: 安装依赖
         run: |
-          set -x
+          set -eux
           sudo apt-get update
           sudo apt-get install -y \
             build-essential uuid-dev iasl nasm python3 python3-pip \
             gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
-            device-tree-compiler git-lfs
-
-      - name: pip 依赖
-        run: |
-          set -x
+            device-tree-compiler git-lfs clang llvm lld
           python3 -m pip install --upgrade pip
-          if [ -f uefi-sheng/pip-requirements.txt ]; then
-            python3 -m pip install -r uefi-sheng/pip-requirements.txt
-          fi
+          python3 -m pip install -r uefi-sheng/pip-requirements.txt || true
           python3 -m pip install coloredlogs || true
 
-      - name: 环境准备脚本
+      # ── 复刻 build-uefi-sheng.sh 的环境，跳过 check-sheng.py ──
+      - name: 准备 EDK2 BaseTools 与 Conf
         run: |
-          set -x
-          cd uefi-sheng
-          ls -l setup_env.sh 2>/dev/null || echo "没有 setup_env.sh"
-          if [ -f setup_env.sh ]; then
-            chmod +x setup_env.sh
-            ./setup_env.sh -p apt || echo "setup_env 返回非零，继续"
+          set -eux
+          ROOT="$GITHUB_WORKSPACE/UniXNU-sheng"
+          UNIXNU_ROOT="$GITHUB_WORKSPACE/UniXNU"
+          MU_BASE="$UNIXNU_ROOT/package/Mu_Basecore"
+
+          # uefi-sheng 要放在 UniXNU-sheng/uefi-sheng（脚本就是按这个路径找的）
+          if [ ! -d "$ROOT/uefi-sheng" ]; then
+            ln -sfn "$GITHUB_WORKSPACE/uefi-sheng" "$ROOT/uefi-sheng"
           fi
 
-      - name: 编译 UEFI
-        env:
-          # shengPkg 默认找 ../UniXNU，这里显式指到工作区根目录下的克隆
-          UNIXNU_ROOT: ${{ github.workspace }}/UniXNU
+          export EDK_TOOLS_PATH="$MU_BASE/BaseTools"
+          echo "EDK_TOOLS_PATH=$EDK_TOOLS_PATH"
+          ls "$EDK_TOOLS_PATH"
+
+          # 编译 BaseTools（提供 build/GenFw/GenFfs 等）
+          make -C "$EDK_TOOLS_PATH" -j"$(nproc)" || true
+          ls "$EDK_TOOLS_PATH/Source/C/bin" | head -20
+
+          CONF="$GITHUB_WORKSPACE/.uefi-conf"
+          mkdir -p "$CONF"
+          for NAME in target tools_def build_rule; do
+            [ -f "$CONF/$NAME.txt" ] || cp "$EDK_TOOLS_PATH/Conf/$NAME.template" "$CONF/$NAME.txt"
+          done
+          ls "$CONF"
+          echo "CONF_PATH=$CONF" >> "$GITHUB_ENV"
+          echo "EDK_TOOLS_PATH=$EDK_TOOLS_PATH" >> "$GITHUB_ENV"
+
+      - name: 编译 UEFI（直接调用 EDK2 build）
         run: |
-          set -x
-          cd uefi-sheng
+          set -eux
+          ROOT="$GITHUB_WORKSPACE/UniXNU-sheng"
+          UNIXNU_ROOT="$GITHUB_WORKSPACE/UniXNU"
+          UES="$ROOT/uefi-sheng"
+          MU_BASE="$UNIXNU_ROOT/package/Mu_Basecore"
+
+          export WORKSPACE="$UES"
+          export CONF_PATH="$GITHUB_WORKSPACE/.uefi-conf"
+          export PYTHON_COMMAND=python3
+          export EDK_TOOLS_PATH="$MU_BASE/BaseTools"
+          export PATH="$EDK_TOOLS_PATH/BinWrappers/PosixLike:$EDK_TOOLS_PATH/Source/C/bin:$PATH"
+          export PACKAGES_PATH="$UES:$UES/Platforms/Xiaomi:$UNIXNU_ROOT/package:\
+          $UNIXNU_ROOT/drivers/DarwinBoot:$MU_BASE:$UES/Common/Mu:$UES/Common/Mu_OEM_Sample:\
+          $UES/Silicon/Qualcomm:$UES/Silicon/Silicium:$UES/Silicium-ACPI:\
+          $UES/Silicium-ACPI/Platforms/Xiaomi:$UES/Silicium-ACPI/Silicon/Qualcomm"
+
+          echo "PACKAGES_PATH=$PACKAGES_PATH"
+          for p in $UNIXNU_ROOT/package $UNIXNU_ROOT/drivers/DarwinBoot $MU_BASE; do
+            echo "check $p"; ls -d "$p" || { echo "缺少 $p"; exit 1; }
+          done
+
+          cd "$UES"
+          # 板级补丁（GIC spurious），仅编译期应用
+          if [ -f "$UES/Resources/MuPatches/Gic-Spurious.patch" ]; then
+            git -C "$MU_BASE" apply --check "$UES/Resources/MuPatches/Gic-Spurious.patch" \
+              && git -C "$MU_BASE" apply "$UES/Resources/MuPatches/Gic-Spurious.patch" \
+              || echo "Gic-Spurious 补丁未应用（可能已包含）"
+          fi
+
           DEVICE="${{ github.event.inputs.device || 'sheng' }}"
           echo "编译设备: $DEVICE"
-          # 有构建缓存时不加 -c，让 EDK2 做增量编译（快得多）
-          CLEAN_FLAG=""
-          if [ "${{ steps.build-cache.outputs.cache-hit }}" != "true" ]; then
-            CLEAN_FLAG="-c"
-            echo "无构建缓存，全量编译"
-          else
-            echo "有构建缓存，增量编译"
-          fi
-          python3 build_uefi.py -d "$DEVICE" -r RELEASE $CLEAN_FLAG 2>&1 | tee build.log
+          build -p "Platforms/Xiaomi/${DEVICE}Pkg/${DEVICE}.dsc" \
+                -a AARCH64 -b DEBUG -t CLANGPDB -n "$(nproc)" \
+                -D FD_BASE=0xA7100000 -D FD_SIZE=0x300000 -D FD_BLOCKS=768 \
+                -D ENABLE_SECUREBOOT=1 -D DEVICE_MODEL="$DEVICE" \
+                -D MEMORY_PROTECTION=TRUE -D SHIP_MODE=FALSE \
+                -D BUILDID_STRING="${DEVICE}-research" 2>&1 | tee build.log
+
           echo "---- 产物 ----"
-          find Build -name "*.fd" | head -20 || true
-          ls -lR Build/*/*/FV 2>/dev/null || true
+          find Build -name "*.fd" | head -20
 
       - name: 上传产物
         if: always()
@@ -164,7 +176,9 @@ jobs:
         with:
           name: uefi-sheng-fd
           path: |
+            UniXNU-sheng/uefi-sheng/Build/**/*.fd
             uefi-sheng/Build/**/*.fd
+            UniXNU-sheng/uefi-sheng/build.log
             uefi-sheng/build.log
           if-no-files-found: warn
           retention-days: 14
