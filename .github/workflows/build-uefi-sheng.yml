@@ -49,10 +49,12 @@ jobs:
         if: steps.src-cache.outputs.cache-hit != 'true'
         run: |
           set -x
-          # submodule 拉取偶发失败，重试三次
+          # 注意：不能用 --depth 1。Mu 的 OverrideValidation 插件会用 git 取
+          # 「变更文件列表」，浅克隆拿不到父提交 → filepath 为 None →
+          # normpath(None) 崩溃。这里要完整克隆。
           for attempt in 1 2 3; do
             rm -rf uefi-sheng
-            if git clone --recursive --depth 1 \
+            if git clone --recursive \
                  https://github.com/UniXNU/uefi-sheng.git uefi-sheng; then
               echo "克隆成功（第 $attempt 次）"
               break
@@ -61,8 +63,9 @@ jobs:
             sleep 20
           done
           cd uefi-sheng
-          git submodule update --init --recursive --depth 1 || \
-            git submodule update --init --recursive
+          git submodule update --init --recursive
+          # 至少有两个提交，插件才能算出变更列表
+          git log --oneline | head -5
           du -sh .
           ls
 
