@@ -17,8 +17,8 @@ OUT=out-shim
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
-# ufs.c 先不编译（还没有 UFS 读取需求）
-SRCS="start.S shim.c console.c mmu.c fdt.c loader.c"
+# ufs.c 必须编：shim.c 里引用了 test_ufs
+SRCS="start.S shim.c console.c mmu.c fdt.c loader.c ufs.c"
 
 echo "=== 编译 ==="
 for f in $SRCS; do
