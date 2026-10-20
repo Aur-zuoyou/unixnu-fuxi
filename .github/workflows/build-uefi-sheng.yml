@@ -35,7 +35,7 @@ permissions:
   contents: read
 
 env:
-  UEFI_SRC_KEY: uefi-src-v4
+  UEFI_SRC_KEY: uefi-src-v5
 
 jobs:
   build:
@@ -86,101 +86,67 @@ jobs:
             echo "下载 $name 彻底失败"; return 1
           }
 
-          # 框架（UniXNU）：用仓库自带的 vendor 包，最可靠
-          if [ -f vendor/UniXNU.tar.gz ]; then
-            echo "使用 vendor/UniXNU.tar.gz"
-            tar -xzf vendor/UniXNU.tar.gz -C .
-          else
-            echo "没有 vendor 包，下载 zip"
-            fetch_zip UniXNU-main https://github.com/UniXNU/UniXNU/archive/refs/heads/main.zip
-            mv UniXNU-main UniXNU
-          fi
+          # 框架（UniXNU）：仓库自带 vendor 包（上游 zip 里 drivers/DarwinBoot 是空目录）
+          tar -xzf vendor/UniXNU.tar.gz -C .
           ls UniXNU/drivers/DarwinBoot/DarwinBootPkg/Driver/DarwinBoot.inf
 
-          # 板级
+          # 板级配置
           fetch_zip UniXNU-sheng-main https://github.com/UniXNU/UniXNU-sheng/archive/refs/heads/main.zip
           mv UniXNU-sheng-main UniXNU-sheng
 
-          # Mu-Silicium 的 SM8550 UEFI 端口（含 shengPkg）
-          fetch_zip uefi-sheng-main https://github.com/UniXNU/uefi-sheng/archive/refs/heads/main.zip
-          mv uefi-sheng-main uefi-sheng
-          # zip 包不含 submodule，逐个下载
-          if [ -f uefi-sheng/.gitmodules ]; then
-            echo "处理 submodule…"
-            python3 - <<'PY'
-          import configparser, os, subprocess, sys, urllib.request
-          cfg = configparser.ConfigParser()
-          cfg.read('uefi-sheng/.gitmodules')
-          for sec in cfg.sections():
-              path = cfg.get(sec, 'path')
-              url = cfg.get(sec, 'url').rstrip('/')
-              if url.endswith('.git'):
-                  url = url[:-4]
-              branch = cfg.get(sec, 'branch', fallback='')
-              if branch and '/' in branch:
-                  # 形如 release/202608 或 commit hash
-                  pass
-              target = os.path.join('uefi-sheng', path)
-              os.makedirs(os.path.dirname(target) or '.', exist_ok=True)
-              import shutil
-              shutil.rmtree(target, ignore_errors=True)
-              zurl = f'{url}/archive/refs/heads/{branch}.zip' if branch else f'{url}/archive/refs/heads/main.zip'
-              print(f'  {path} <- {zurl}')
-              tmp = '/tmp/sub.zip'
-              try:
-                  urllib.request.urlretrieve(zurl, tmp)
-              except Exception as e:
-                  print(f'  下载失败 {zurl}: {e}')
-                  continue
-              subprocess.run(['unzip', '-q', tmp, '-d', '/tmp/subx'], check=True)
-              roots = os.listdir('/tmp/subx')
-              if roots:
-                  shutil.move(os.path.join('/tmp/subx', roots[0]), target)
-              shutil.rmtree('/tmp/subx', ignore_errors=True)
-          PY
-          fi
-          ls uefi-sheng/Platforms/Xiaomi/shengPkg | head
+          # Mu-Silicium UEFI 端口：仓库自带 vendor 包（上游 zip 里没有 shengPkg）
+          tar -xzf vendor/uefi-sheng.tar.gz -C .
+          ls uefi-sheng/Platforms/Xiaomi/shengPkg/sheng.dsc
 
           # Mu 基座：EDK_TOOLS_PATH 指向 UniXNU/package/Mu_Basecore/BaseTools
           mkdir -p UniXNU/package
           fetch_zip mu_basecore-release-202608 \
             https://github.com/microsoft/mu_basecore/archive/refs/heads/release/202608.zip
           mv mu_basecore-release-202608 UniXNU/package/Mu_Basecore
+          ls UniXNU/package/Mu_Basecore/BaseTools/Conf/target.template
+
+          # Common/Mu 等 submodule 不在 vendor 包里，从公开仓库补齐
+          for spec in \
+            "Common/Mu|https://github.com/microsoft/mu_plus/archive/refs/heads/release/202608.zip" \
+            "Common/Mu_OEM_Sample|https://github.com/microsoft/mu_oem_sample/archive/refs/heads/release/202608.zip"
+          do
+            dst="uefi-sheng/${spec%%|*}"
+            url="${spec##*|}"
+            if [ -d "$dst" ] && [ -n "$(ls -A "$dst" 2>/dev/null)" ]; then
+              echo "$dst 已存在，跳过"
+              continue
+            fi
+            fetch_zip _sub "$url" || { echo "跳过 $dst"; continue; }
+            mkdir -p "$dst"
+            mv _sub/* "$dst/" 2>/dev/null || true
+            rm -rf _sub
+            echo "$dst 补齐: $(ls "$dst" | head -3 | tr '\n' ' ')"
+          done
 
           du -sh UniXNU UniXNU-sheng uefi-sheng UniXNU/package/Mu_Basecore
 
-      # 缓存命中时也要保证关键路径存在（早期缓存的 key 可能不完整）
+      # 缓存命中时也要保证关键路径存在
       - name: 校验关键路径
         run: |
           set -eux
-          # DarwinBoot 是唯一的引导器，必须完整；缺了说明缓存里的 UniXNU 不完整
-          DB="$GITHUB_WORKSPACE/UniXNU/drivers/DarwinBoot/DarwinBootPkg/Driver/DarwinBoot.inf"
-          if [ ! -f "$DB" ]; then
-            echo "UniXNU 不完整（缺 DarwinBoot.inf），强制重新克隆"
-            rm -rf "$GITHUB_WORKSPACE/UniXNU"
-            for attempt in 1 2 3; do
-              git clone --depth 1 https://github.com/UniXNU/UniXNU.git \
-                "$GITHUB_WORKSPACE/UniXNU" && break
-              echo "重试 $attempt"; sleep 20; rm -rf "$GITHUB_WORKSPACE/UniXNU"
-            done
+          W="$GITHUB_WORKSPACE"
+          # vendor 包是最可靠来源，缺了就地重新解压（不再走 git clone）
+          if [ ! -f "$W/UniXNU/drivers/DarwinBoot/DarwinBootPkg/Driver/DarwinBoot.inf" ]; then
+            echo "UniXNU 不完整，从 vendor 包重新解压"
+            rm -rf "$W/UniXNU"
+            tar -xzf "$W/vendor/UniXNU.tar.gz" -C "$W"
           fi
-          ls -l "$DB"
-          ls "$GITHUB_WORKSPACE/UniXNU/drivers"
+          if [ ! -f "$W/uefi-sheng/Platforms/Xiaomi/shengPkg/sheng.dsc" ]; then
+            echo "uefi-sheng 不完整，从 vendor 包重新解压"
+            rm -rf "$W/uefi-sheng"
+            tar -xzf "$W/vendor/uefi-sheng.tar.gz" -C "$W"
+          fi
 
-          MU_BASE="$GITHUB_WORKSPACE/UniXNU/package/Mu_Basecore"
-          if [ ! -d "$MU_BASE/BaseTools" ]; then
-            echo "Mu_Basecore 不在 $MU_BASE，重新克隆"
-            rm -rf "$MU_BASE"
-            mkdir -p "$(dirname "$MU_BASE")"
-            for attempt in 1 2 3; do
-              git clone --depth 1 --branch release/202608 \
-                https://github.com/microsoft/mu_basecore.git "$MU_BASE" && break
-              echo "重试 $attempt"; sleep 20
-            done
-          fi
-          ls "$MU_BASE/BaseTools" | head
+          ls -l "$W/UniXNU/drivers/DarwinBoot/DarwinBootPkg/Driver/DarwinBoot.inf"
+          ls -l "$W/uefi-sheng/Platforms/Xiaomi/shengPkg/sheng.dsc"
+          ls "$W/UniXNU/package/Mu_Basecore/BaseTools" | head
           for d in UniXNU UniXNU-sheng uefi-sheng; do
-            ls -d "$GITHUB_WORKSPACE/$d" || { echo "缺少 $d"; exit 1; }
+            ls -d "$W/$d" || { echo "缺少 $d"; exit 1; }
           done
 
       - name: 准备 EDK2 BaseTools 与 Conf
