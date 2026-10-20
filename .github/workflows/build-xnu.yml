@@ -11,6 +11,11 @@ permissions:
   contents: write
   actions: write
 
+# 连续推送时只保留最新一次，避免多个构建互相抢自动提交
+concurrency:
+  group: build-xnu-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     paths:
@@ -102,6 +107,7 @@ jobs:
 
       - name: commit kernel back to repo (firmware build uses same binary)
         if: success()
+        continue-on-error: true
         run: |
           set -e
           if [ ! -f out/kernel.development.fuxi ]; then
@@ -117,8 +123,26 @@ jobs:
             echo "kernel unchanged, skip commit"
           else
             git commit -m "rom/xnu: auto-update kernel $(date -u +%Y-%m-%dT%H:%MZ)"
-            git push
-            echo "committed; firmware build will follow"
+            # 和人工提交赛跑：先 rebase 再推，被拒就重试
+            pushed=0
+            for i in 1 2 3 4 5; do
+              git fetch origin main || true
+              if ! git rebase origin/main; then
+                git rebase --abort || true
+                sleep 3
+                continue
+              fi
+              if git push origin HEAD:main; then
+                echo "committed (attempt $i)"
+                pushed=1
+                break
+              fi
+              echo "push rejected, retrying..."
+              sleep 5
+            done
+            if [ "$pushed" = "0" ]; then
+              echo "::warning::kernel commit push failed after retries (artifact still uploaded)"
+            fi
           fi
 
       - name: dispatch firmware build (after kernel committed)
