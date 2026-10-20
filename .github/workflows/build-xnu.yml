@@ -9,6 +9,7 @@ name: build-xnu
 
 permissions:
   contents: write
+  actions: write
 
 on:
   push:
@@ -119,3 +120,12 @@ jobs:
             git push
             echo "committed; firmware build will follow"
           fi
+
+      - name: dispatch firmware build (after kernel committed)
+        if: success()
+        run: |
+          curl -sS -X POST \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/build-fuxi-uefi.yml/dispatches" \
+            -d '{"ref":"main"}' -o /dev/null -w "dispatch http=%{http_code}\n"

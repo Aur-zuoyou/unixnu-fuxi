@@ -13,3 +13,6 @@ __pycache__/
 .vscode/
 .idea/
 *.log
+rom/xnu/qemu-payload.bin
+rom/xnu/payload.bin
+rom/xnu/*.bin

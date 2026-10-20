@@ -9,11 +9,12 @@ name: build-fuxi-uefi
 #
 # 注意: 这个镜像是我们自己编的, 没有经过任何真机验证。刷机前确认能回滚。
 
+concurrency:
+  group: fuxi-uefi-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   # xnu 内核构建完成后自动重编固件（省掉一次人工等待）
-  workflow_run:
-    workflows: ["build-xnu"]
-    types: [completed]
   push:
     paths:
       - "loader/**"
