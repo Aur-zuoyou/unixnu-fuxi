@@ -157,15 +157,30 @@ const char *loader_boot(uintptr_t dtb)
 	uintptr_t adt_pa = p->kernel_end + pa_of_va_base;
 	copy64(adt_pa, src + p->adt_off, p->adt_size);
 
-	/* ADT 里的 dram-base/dram-size 也要跟着改（XNU 用它建 physmap） */
+	/* ADT 里的 dram-base/dram-size 也要跟着改（XNU 用它建 physmap）。
+	 * 注意：必须字节级扫描，不能按 8 字节步进——ADT 属性值不对齐，
+	 * dram-base(0x100000000) 实际落在 0x23c（%8==4），8 字节步进扫不到，
+	 * 导致 ADT 里 dram-base 仍是旧值 → phys_base 错位 → tpidr_el1=0 panic。 */
 	{
-		volatile uint64_t *w = (volatile uint64_t *)adt_pa;
-		uint64_t n = p->adt_size / 8;
-		for (uint64_t i = 0; i < n; i++) {
-			if (w[i] == p->phys_base)
-				w[i] = phys_base;
-			else if (w[i] == p->mem_size)
-				w[i] = mem_size;
+		volatile uint8_t *b = (volatile uint8_t *)adt_pa;
+		uint64_t n = p->adt_size;
+		uint64_t i = 0;
+		while (i + 8 <= n) {
+			int eq_base = 1, eq_size = 1;
+			for (int j = 0; j < 8; j++) {
+				uint8_t v = b[i + j];
+				if (v != ((const uint8_t *)&p->phys_base)[j]) eq_base = 0;
+				if (v != ((const uint8_t *)&p->mem_size)[j])  eq_size = 0;
+			}
+			if (eq_base) {
+				for (int j = 0; j < 8; j++) b[i + j] = ((const uint8_t *)&phys_base)[j];
+				i += 8;
+			} else if (eq_size) {
+				for (int j = 0; j < 8; j++) b[i + j] = ((const uint8_t *)&mem_size)[j];
+				i += 8;
+			} else {
+				i += 1;
+			}
 		}
 	}
 	uintptr_t ba_pa = (adt_pa + p->adt_size + PAGE_16K - 1) & ~(PAGE_16K - 1);
