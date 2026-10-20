@@ -23,8 +23,11 @@ import iosadt as adt  # noqa: E402
 OLD = b"sweet"
 NEW = b"fuxi"
 
-DRAM_BASE = 0x100000000
-DRAM_SIZE = 0xfcc00000
+# DRAM_BASE/SIZE 采用与 qemu.adt 相同的低区值（QEMU 已验证 phys_base 与
+# ADT dram-base 一致时 XNU 能跑到底）。真机 4GB 以上不可访问（ESR 0x96000010），
+# 0x42000000 位于低区、可访问，且与内核加载地址一致 → 不触发 tpidr panic。
+DRAM_BASE = 0x42000000
+DRAM_SIZE = 0x7e000000
 
 GICD, GICD_SIZE = 0x17100000 - 0x01000000, 0x10000   # 相对 /soc（XNU 会加 soc_base_phys=0x01000000）
 GICR, GICR_SIZE = 0x17180000 - 0x01000000, 0x200000

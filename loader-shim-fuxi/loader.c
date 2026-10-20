@@ -125,18 +125,13 @@ const char *loader_boot(uintptr_t dtb)
 		return "bad payload header";
 
 	/*
-	 * 真机 4GB 以上地址访问会触发同步外部中止（ESR 0x96000010 / FAR 0x101004000），
-	 * 所以内核放低区。但 phys_base 必须与 ADT 的 dram-base 一致（对照 UniXNU:
-	 * 引导器选定物理窗口后写回 ADT，XNU 早期按 dram-base 建 per-CPU/physmap）。
-	 *
-	 * 之前硬编码 0x90000000 而 ADT dram-base 是 0x100000000 → 错位 → tpidr_el1=0。
-	 * 现在：phys_base 取低区 0x90000000，并同步把 ADT 的 dram-base 改成同一值
-	 * （下方 ADT 修补逻辑），窗口用 256MB（UniXNU WINDOW_SIZE），避免越界。
+	 * phys_base 直接采用 payload 头里的值（mkpayload 从 ADT 的 dram-base 读，
+	 * 现在 fuxi.adt 的 dram-base=0x42000000，与 qemu.adt 一致——QEMU 已验证
+	 * phys_base 与 ADT 一致时 XNU 能跑到底）。真机 0x42000000 位于低 4GB、可访问，
+	 * 与内核加载地址一致 → 不触发 phys_base 错位导致的 tpidr panic。
 	 */
-	const uint64_t FUXI_LOW_PHYS = 0x90000000ULL;
-	const uint64_t FUXI_LOW_SIZE = 0x10000000ULL;   /* 256MB：UniXNU 的 WINDOW_SIZE */
-	uint64_t phys_base = FUXI_LOW_PHYS;
-	uint64_t mem_size  = FUXI_LOW_SIZE;
+	uint64_t phys_base = p->phys_base;
+	uint64_t mem_size  = p->mem_size;
 
 	uint64_t pa_of_va_base = phys_base - p->virt_base;	/* pa = va + this */
 	con_hex2("PHYS", "base=", phys_base, "size=", mem_size);
