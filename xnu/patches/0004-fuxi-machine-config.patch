@@ -132,7 +132,7 @@ index e5336e5..f8d0d2e 100644
  #if (!CONFIG_KERNEL_INTEGRITY || (CONFIG_KERNEL_INTEGRITY && !defined(KERNEL_INTEGRITY_WT)))
  	/* Watchtower
 diff --git a/pexpert/arm/pe_fiq.c b/pexpert/arm/pe_fiq.c
-index 3ad743f..9ecd5c6 100644
+index 3ad743f..d908e07 100644
 --- a/pexpert/arm/pe_fiq.c
 +++ b/pexpert/arm/pe_fiq.c
 @@ -50,6 +50,24 @@ find_gicr_pe_base()
@@ -160,7 +160,7 @@ index 3ad743f..9ecd5c6 100644
  	for (vm_offset_t offset = 0; offset < gicr_size; offset += GICR_PE_SIZE) {
  		vm_offset_t gicr_pe_base = gicr_base + offset;
  		uint64_t gicr_typer = gicr_read64(GICR_TYPER);
-@@ -141,11 +159,25 @@ pe_init_fiq()
+@@ -141,11 +159,31 @@ pe_init_fiq()
  		}
  	}
  
@@ -171,11 +171,17 @@ index 3ad743f..9ecd5c6 100644
 +	 * and arrives as an IRQ (see sleh_irq). GICR_IGROUPR0 reads as zero
 +	 * from the non-secure side even after this write; delivery still works.
 +	 */
-+	gicr_write32(GICR_IGROUPR0, 0xFFFFFFFF);
++	/*
++	 * GICv3 的 redistributor 分两帧：RD 帧（0x00000，TYPER/WAKER 等）和
++	 * SGI 帧（0x10000，IGROUPR/IPRIORITYR/ISENABLER）。gicr_pe_base 指向
++	 * RD 帧，所以写 SGI 帧的寄存器要自己加 0x10000，否则写到保留区，
++	 * 真机上直接同步外部中止。
++	 */
++	gicr_write32(0x10000 + GICR_IGROUPR0, 0xFFFFFFFF);
 +	for (unsigned int i = 0; i < 32; i += 4) {
-+		gicr_write32(GICR_IPRIORITYR0 + i, 0xA0A0A0A0);
++		gicr_write32(0x10000 + GICR_IPRIORITYR0 + i, 0xA0A0A0A0);
 +	}
-+	gicr_write32(GICR_ISENABLER0, (1U << FUXI_VTIMER_INTID) | (1U << FUXI_IPI_SGI));
++	gicr_write32(0x10000 + GICR_ISENABLER0, (1U << FUXI_VTIMER_INTID) | (1U << FUXI_IPI_SGI));
 +#else
  	// Configure timers and legacy FIQ to be group 0
  	gicr_write32(GICR_IGROUPR0, 0x81FFFFFF);
@@ -186,7 +192,7 @@ index 3ad743f..9ecd5c6 100644
  
  	// Enable system register access
  	uint64_t icc_sre = __builtin_arm_rsr64("ICC_SRE_EL1");
-@@ -153,8 +185,12 @@ pe_init_fiq()
+@@ -153,8 +191,12 @@ pe_init_fiq()
  	__builtin_arm_wsr64("ICC_SRE_EL1", icc_sre);
  	__builtin_arm_isb(ISB_SY);
  
@@ -199,7 +205,7 @@ index 3ad743f..9ecd5c6 100644
  	__builtin_arm_wsr64("ICC_PMR_EL1", 0xFF);
  
  	// Set EOI mode of this processor
-@@ -162,12 +198,24 @@ pe_init_fiq()
+@@ -162,12 +204,24 @@ pe_init_fiq()
  	icc_ctlr &= ~ICC_CTLR_EOIMODE;
  	__builtin_arm_wsr64("ICC_CTLR_EL1", icc_ctlr);
  
