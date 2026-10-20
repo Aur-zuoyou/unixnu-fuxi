@@ -153,7 +153,7 @@ def build(seed=None, qemu=False, highmem=False):
         ('compatible', cstr('arm,gic-v3')),
         ('interrupt-controller', b''),
         ('virtual-timer-intid', u32(QEMU_VTIMER_INTID if qemu else VTIMER_INTID)),
-        ('reg', u64(gicd - SOC_BASE, GICD_SIZE, gicr - SOC_BASE, GICR_SIZE)),
+        ('reg', u64(gicd, GICD_SIZE, gicr, GICR_SIZE)),  # 绝对地址：我们的平台专家补丁不做 ranges 转换
     ])
     arm_io = node('arm-io', [
         ph(),

@@ -15,8 +15,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import iosadt as adt        # noqa: E402
 import mkadt_fuxi as M      # noqa: E402
 
-DRAM_BASE = 0x50000000   # 避开 QEMU 放在 RAM 基址的 DTB
-DRAM_SIZE = 0x40000000      # 1GB
+DRAM_BASE = 0x42000000   # 32MB 对齐，避开 QEMU 的 DTB
+DRAM_SIZE = 0x7E000000      # 到 0xC0000000，把帧缓冲 0xB0000000 包进来
 
 
 def patch_u64(blob, old, new):

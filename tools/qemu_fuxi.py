@@ -175,6 +175,19 @@ def main():
     result = {"status": "qemu_exited", "rc": p.returncode}
     if p.poll() is None:
         try:
+            # 多次采样 PC，判断内核是死循环还是活着
+            pcs = []
+            for k in range(4):
+                q.cmd("stop")
+                r = q.cmd("human-monitor-command", **{"command-line": "info registers"})
+                txt = r.get("return", "")
+                for line in txt.split(chr(10)):
+                    if line.strip().startswith("PC="):
+                        pcs.append(line.split()[0])
+                        break
+                q.cmd("cont")
+                time.sleep(0.5)
+            print("PC 采样:", pcs)
             q.cmd("stop")
             regs = q.cmd("human-monitor-command", **{"command-line": "info registers"})
             open(os.path.join(out, "regs.txt"), "w", encoding="utf-8").write(
