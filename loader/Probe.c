@@ -910,19 +910,10 @@ OnTextOut (
 
         /* 自测已通过（整屏变红 = 关 MMU/缓存正确），现在真正跳 XNU */
 
-        /* 跳转前在 y=1200 画一条品红色带，和内核里的同类色带对照 */
-        {
-          volatile UINT32  *Bar = (volatile UINT32 *) mFb;
-          UINTN             Row;
-          UINTN             Col;
-
-          for (Row = 1200; Row < 1264; Row++) {
-            for (Col = 0; Col < 1080; Col++) {
-              Bar[Row * 1080 + Col] = 0xFFFF00FFU;
-            }
-          }
-          SweepFb ();
-        }
+        /* 跳转前把整屏刷成品红色：看到品红 = 加载器执行到位 */
+        Fill (0xFFFF00FF);
+        mLogY = 40;
+        XnuScreenLog ("PREJUMP", (UINT64) 0);
 
         XnuBootRun ((mXnuBufSize > 0) ? mXnuBuf : XnuPayloadAddr (),
                     (mXnuBufSize > 0) ? mXnuBufSize : XnuPayloadSize (),
