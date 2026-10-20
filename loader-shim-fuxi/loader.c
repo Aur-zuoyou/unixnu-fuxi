@@ -173,6 +173,18 @@ const char *loader_boot(uintptr_t dtb)
 
 	uintptr_t entry_pa = p->entry_va + pa_of_va_base;
 	con_hex("JUMP", entry_pa);
+
+	/* 跳转前确认：入口处真的是代码吗？MMU 真的是关的吗？ */
+	{
+		volatile const uint64_t *e = (volatile const uint64_t *)entry_pa;
+		uint64_t sctlr;
+
+		con_hex("CODE@ENTRY", e[0]);
+		con_hex("CODE@+8", e[1]);
+
+		__asm__ volatile("mrs %0, sctlr_el1" : "=r"(sctlr));
+		con_hex("SCTLR", sctlr);
+	}
 	con_str("XNU", "jumping (fbcon clears screen)");
 
 	__asm__ volatile("dsb sy; ic iallu; dsb sy; isb" ::: "memory");

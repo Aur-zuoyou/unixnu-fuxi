@@ -1,16 +1,25 @@
 diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 --- a/osfmk/arm64/start.s
 +++ b/osfmk/arm64/start.s
-@@ -220,4 +220,18 @@
+@@ -220,4 +220,27 @@
  	.align	3
  	.globl EXT(_start)
  LEXT(_start)
 +
-+	/* fuxi: 把屏幕上部 256 行刷绿后停机。 */
-+	/* 只写 1MB，避免 MMU 关闭下 260 万次 Device 写太慢。 */
++	/* fuxi 停机实验：刷色块后 wfi，看到颜色即内核已执行 */
++	/* 裸机可见的 splash 帧缓冲（绿） */
 +	MOV64	x9, 0xB8000000
 +	MOV64	x10, 0x0000FF00
-+	MOV64	x11, 276480		// 256 行 * 1080
++	MOV64	x11, 276480
++	1:
++	str	w10, [x9], #4
++		subs	x11, x11, #1
++		b.ne	1b
++	dsb	sy
++	/* UEFI GOP 的地址（黄绿，对比用） */
++	MOV64	x9, 0xB0000000
++	MOV64	x10, 0x00FFFF00
++	MOV64	x11, 276480
 +	1:
 +	str	w10, [x9], #4
 +		subs	x11, x11, #1
