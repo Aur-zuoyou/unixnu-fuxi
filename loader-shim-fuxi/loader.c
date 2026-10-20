@@ -305,6 +305,16 @@ const char *loader_boot(uintptr_t dtb)
 			con_hex("SCTLR-NEW", now);
 		}
 	}
+
+	/*
+	 * 关掉 MMU 后必须清 TLB —— DarwinBoot 的 DarwinEnter 就是这么做的
+	 * （mrs/msr sctlr_el1 之后紧跟 tlbi vmalle1）。
+	 * 否则 TLB 里残留 shim 运行时的 VA->PA 条目，内核 start.s 建好自己的
+	 * 页表之后仍会命中旧映射，表现为访问看似合法的地址却触发转换错误。
+	 */
+	__asm__ volatile("dsb sy; isb; tlbi vmalle1; dsb sy; isb" ::: "memory");
+	con_str("TLB", "invalidated (tlbi vmalle1)");
+
 	__asm__ volatile("dsb sy; isb" ::: "memory");
 
 	/*
