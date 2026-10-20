@@ -82,6 +82,23 @@ def set_gic_absolute(node):
     return False
 
 
+FB_BASE, FB_SIZE = 0xB8000000, 0x9E4000   # 裸机阶段真正显示的 splash 帧缓冲
+
+
+def set_fbcon_reg(node):
+    """把 fuxi-fbcon 节点的 reg 强制成裸机可见的帧缓冲"""
+    if node_name(node) == b"fuxi-fbcon":
+        for i, (key, flags, val) in enumerate(node.props):
+            if key == "reg":
+                node.props[i] = (key, flags, struct.pack("<2Q", FB_BASE, FB_SIZE))
+                return True
+        return False
+    for c in node.children:
+        if set_fbcon_reg(c):
+            return True
+    return False
+
+
 def main() -> int:
     if len(sys.argv) < 3:
         print(__doc__)
@@ -92,12 +109,14 @@ def main() -> int:
     renamed = rename_in_tree(root)
     dram_ok = set_chosen_dram(root)
     gic_ok = set_gic_absolute(root)
+    fb_ok = set_fbcon_reg(root)
     blob = adt.serialize(root)
     open(dst, "wb").write(blob)
 
     print(f"改名属性数: {renamed}")
     print(f"chosen dram 已设置: {dram_ok}")
     print(f"gic 改成绝对地址: {gic_ok}")
+    print(f"fbcon 帧缓冲: {fb_ok}")
     print(f"输出: {dst}  {len(blob):,} 字节")
 
     if "--dump" in sys.argv:

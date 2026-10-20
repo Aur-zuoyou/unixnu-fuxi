@@ -96,7 +96,7 @@ index ccbb188..777aca4 100644
  
 +#if defined(FUXI)
 +	/* Stage 0: white 64x32 band, no stack or page tables needed. */
-+	MOV64	x0, (0xB0000000 + 2368 * 4320)
++	MOV64	x0, (0xB8000000 + 2368 * 4320)
 +	mov		w1, #-1
 +	mov		x2, #32
 +	mov		x4, #4320
@@ -128,7 +128,7 @@ index ccbb188..777aca4 100644
 +	 * FUXI uses 16K pages and all bring-up RAM is below 4GB, so the first
 +	 * V=P L2 page is bootstrap_pagetables + 2*PGBYTES.
 +	 */
-+	MOV64	x10, 0xB0000000
++	MOV64	x10, 0xB8000000
 +	MOV64	x11, (ARM_TTE_TYPE_BLOCK | ARM_TTE_VALID | ARM_TTE_BLOCK_SH(SH_OUTER_MEMORY) | ARM_TTE_BLOCK_ATTRINDX(CACHE_ATTRINDX_WRITECOMB) | ARM_TTE_BLOCK_AF | ARM_TTE_BLOCK_PNX | ARM_TTE_BLOCK_NX)
 +	orr		x11, x11, x10
 +	and		x12, x10, #(ARM_TT_L2_INDEX_MASK)
@@ -158,7 +158,7 @@ index 0000000..8f4c808
 +#include <stdint.h>
 +#include <kern/misc_protos.h>
 +
-+#define EARLY_FB ((volatile uint32_t *)(uintptr_t)0xB0000000)
++#define EARLY_FB ((volatile uint32_t *)(uintptr_t)0xB8000000)
 +#define EARLY_WIDTH 1080u
 +#define EARLY_HEIGHT 2400u
 +#define EARLY_STRIDE (4320u / 4)
