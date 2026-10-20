@@ -315,6 +315,19 @@ XnuBootRun (
     UINT64  EntryPa = EntryVa + PaOfVa;
     UINT64  Head;
 
+  {
+    volatile UINT32  *Fb = (volatile UINT32 *)FbBase;
+    UINTN             Pixels = (UINTN)FbPitch * (UINTN)FbHeight;   // FbPitch 单位是像素，不要再除 4
+    UINTN             k;
+
+    for (k = 0; k < Pixels; k++) {
+      Fb[k] = 0xFFFF00FFU;
+    }
+    if (Log != NULL) {
+      Log ("JUMPING", EntryVa + PaOfVa);
+    }
+  }
+
     CopyMem (&Head, (VOID *)(UINTN)EntryPa, 8);
     if (Log != NULL) {
       Log ("ENTRY PA", EntryPa);
@@ -335,18 +348,6 @@ XnuBootRun (
    * 最后一步的探针：整屏刷成品红 + 打一行 JUMPING，然后才跳。
    * 看到品红+JUMPING = 段拷贝/ADT/boot_args/清缓存全部走完，正准备跳。
    */
-  {
-    volatile UINT32  *Fb = (volatile UINT32 *)FbBase;
-    UINTN             Pixels = (UINTN)FbPitch * (UINTN)FbHeight;   // FbPitch 单位是像素，不要再除 4
-    UINTN             k;
-
-    for (k = 0; k < Pixels; k++) {
-      Fb[k] = 0xFFFF00FFU;
-    }
-    if (Log != NULL) {
-      Log ("JUMPING", EntryVa + PaOfVa);
-    }
-  }
 
   AsmXnuJump ((UINTN)(EntryVa + PaOfVa), (UINTN)BaPa);
 }
