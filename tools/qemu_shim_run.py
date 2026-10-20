@@ -98,7 +98,7 @@ def main() -> int:
             import re
             for m in re.finditer(r'\b(X\d+|PC|SP|X30)\s*=\s*([0-9a-f]+)', line):
                 regs[m.group(1)] = int(m.group(2), 16)
-        for k in ("PC","X0","X1","X2","X3","X5","X8","X30"):
+        for k in ("PC","X0","X1","X2","X3","X19","X20","X21","X22","X27","X30"):
             if k in regs:
                 print("    %s = 0x%x" % (k, regs[k]))
         # 读 shim 里的 con_fb 变量（.data 段，物理地址直接读）
