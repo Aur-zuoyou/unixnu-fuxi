@@ -72,6 +72,11 @@ AsmXnuDcacheInvalidateRange (
   );
 
 VOID
+AsmXnuTryMmuOff (
+  OUT UINT64  Out[2]
+  );
+
+VOID
 AsmXnuJump (
   IN UINTN  EntryPa,
   IN UINTN  BootArgsPa
@@ -335,6 +340,21 @@ XnuBootRun (
       Log ("JUMPING", EntryVa + PaOfVa);
     }
   }
+
+    /*
+     * 验证 MMU 到底能不能关：如果 EL2 上有 hypervisor 设了 HCR_EL2.TVM，
+     * EL1 写 SCTLR_EL1 会被静默忽略，那么后面 br 到物理地址就会失败。
+     */
+    {
+      UINT64  Mm[2];
+
+      AsmXnuTryMmuOff (Mm);
+      if (Log != NULL) {
+        Log ("SCTLR BEFORE", Mm[0]);
+        Log ("SCTLR AFTER", Mm[1]);
+        Log ("MMU CAN OFF", (Mm[1] & 1ULL) == 0 ? 1 : 0);
+      }
+    }
 
     CopyMem (&Head, (VOID *)(UINTN)EntryPa, 8);
     if (Log != NULL) {

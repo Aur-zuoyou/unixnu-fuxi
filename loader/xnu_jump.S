@@ -51,6 +51,27 @@ AsmXnuDcacheInvalidateRange:
 .size   AsmXnuDcacheInvalidateRange, . - AsmXnuDcacheInvalidateRange
 
 // ---------------------------------------------------------------------------
+// void AsmXnuTryMmuOff(UINT64 out[2])
+//   out[0] = 清 M 之前的 SCTLR_EL1
+//   out[1] = 清 M 之后立刻读回的 SCTLR_EL1
+// 结束时恢复原值（MMU 保持开启），所以对调用者安全。
+// ---------------------------------------------------------------------------
+.global AsmXnuTryMmuOff
+.type   AsmXnuTryMmuOff, %function
+AsmXnuTryMmuOff:
+    mrs     x2, sctlr_el1
+    str     x2, [x0]
+    bic     x3, x2, #0x1
+    msr     sctlr_el1, x3
+    isb
+    mrs     x4, sctlr_el1
+    str     x4, [x0, #8]
+    msr     sctlr_el1, x2
+    isb
+    ret
+.size   AsmXnuTryMmuOff, . - AsmXnuTryMmuOff
+
+// ---------------------------------------------------------------------------
 // void AsmXnuJump(UINTN entry_pa, UINTN boot_args_pa)
 // ---------------------------------------------------------------------------
 .global AsmXnuJump
