@@ -116,14 +116,7 @@ XnuPatchAdt (
   UINT32  A;
   UINT32  B;
 
-  A  = PatchU64 (Adt, Len, ADT_OLD_BASE, Base);
-  A += PatchU64 (Adt, Len, ADT_OLD_SIZE, Size);
-  /*
-   * 兜底：有些 ADT（例如从 ios-sweet 的 kalama.adt 转来的）里 GIC 用的是
-   * 相对 /soc 的偏移，而内核不做 ranges 转换，会把中断控制器初始化到
-   * 错误地址。这里直接改成 fuxi 的绝对地址。
-   */
-  A += PatchU64 (Adt, Len, ADT_OLD_GICD, ADT_NEW_GICD);
-  A += PatchU64 (Adt, Len, ADT_OLD_GICR, ADT_NEW_GICR);
-  return A;
+  A = PatchU64 (Adt, Len, ADT_OLD_BASE, Base);
+  B = PatchU64 (Adt, Len, ADT_OLD_SIZE, Size);
+  return A + B;
 }
