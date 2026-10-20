@@ -70,7 +70,15 @@ jobs:
           }
 
           # 框架（提供 package/ 与 drivers/DarwinBoot）
-          clone_retry UniXNU       https://github.com/UniXNU/UniXNU.git --depth 1
+          # 优先用仓库自带的 vendor/UniXNU.tar.gz：上游 clone 下来的树里
+          # drivers/DarwinBoot/DarwinBootPkg 是空的，缺 DarwinBoot.inf。
+          if [ -f vendor/UniXNU.tar.gz ]; then
+            echo "使用仓库自带的 vendor/UniXNU.tar.gz"
+            tar -xzf vendor/UniXNU.tar.gz -C .
+          else
+            echo "vendor 包不存在，回退到 git clone"
+            clone_retry UniXNU https://github.com/UniXNU/UniXNU.git --depth 1
+          fi
           # 板级（board.toml / sheng_defconfig / scripts）
           clone_retry UniXNU-sheng https://github.com/UniXNU/UniXNU-sheng.git --depth 1
           # Mu-Silicium 的 SM8550 UEFI 端口（含 shengPkg）
