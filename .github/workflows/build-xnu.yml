@@ -11,11 +11,6 @@ permissions:
   contents: write
   actions: write
 
-# 连续推送时只保留最新一次，避免多个构建互相抢自动提交
-concurrency:
-  group: build-xnu-${{ github.ref }}
-  cancel-in-progress: true
-
 on:
   push:
     paths:
