@@ -5,7 +5,7 @@ diff --git a/osfmk/prng/prng_random.c b/osfmk/prng/prng_random.c
  		     .strictFIPS = 0,
  	     }};
  
-+#if defined(FUXI)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +/*
 + * The corecrypto kext normally installs the kernel PRNG. FUXI has no such
 + * kext: use the built-in HMAC-SHA256 DRBG, just as early_random does. A
@@ -146,7 +146,7 @@ diff --git a/osfmk/prng/prng_random.c b/osfmk/prng/prng_random.c
  write_random(void * buffer, u_int numbytes)
  {
  	uint8_t seed[SHA256_DIGEST_LENGTH];
-+#if defined(FUXI)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +	/* Hash without depending on the absent corecrypto kext's dispatch table. */
 +	const struct ccdigest_info *di = &ccsha256_ltc_di;
 +	ccdigest_di_decl(di, ctx);
@@ -172,7 +172,7 @@ diff --git a/osfmk/prng/entropy.c b/osfmk/prng/entropy.c
  #include <machine/machine_routines.h>
  #include <libkern/section_keywords.h>
  #include <sys/cdefs.h>
-+#if defined(FUXI)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +#include <corecrypto/ccdigest.h>
 +#include <corecrypto/ccsha2.h>
 +#endif
@@ -183,7 +183,7 @@ diff --git a/osfmk/prng/entropy.c b/osfmk/prng/entropy.c
  	// State for a SHA256 computation. This is used to accumulate
  	// entropy samples from across all CPUs. It is finalized when
  	// entropy is provided to the consumer of this module.
-+#if defined(FUXI)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +	ccdigest_ctx_decl(CCSHA256_STATE_SIZE, CCSHA256_BLOCK_SIZE, sha256_ctx);
 +#else
  	SHA256_CTX sha256_ctx;
@@ -208,7 +208,7 @@ diff --git a/osfmk/prng/entropy.c b/osfmk/prng/entropy.c
 +static void
 +entropy_hash_init(void)
 +{
-+#if defined(FUXI)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +	ccdigest_init(&ccsha256_ltc_di, entropy_data.sha256_ctx);
 +#else
 +	SHA256_Init(&entropy_data.sha256_ctx);
@@ -218,7 +218,7 @@ diff --git a/osfmk/prng/entropy.c b/osfmk/prng/entropy.c
 +static void
 +entropy_hash_update(const void *data, size_t nbytes)
 +{
-+#if defined(FUXI)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +	ccdigest_update(&ccsha256_ltc_di, entropy_data.sha256_ctx, nbytes, data);
 +#else
 +	SHA256_Update(&entropy_data.sha256_ctx, data, nbytes);
@@ -228,7 +228,7 @@ diff --git a/osfmk/prng/entropy.c b/osfmk/prng/entropy.c
 +static void
 +entropy_hash_final(void *out)
 +{
-+#if defined(FUXI)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +	ccdigest_final(&ccsha256_ltc_di, entropy_data.sha256_ctx, out);
 +	ccdigest_ctx_clear(CCSHA256_STATE_SIZE, CCSHA256_BLOCK_SIZE, entropy_data.sha256_ctx);
 +#else
@@ -248,7 +248,7 @@ diff --git a/osfmk/prng/entropy.c b/osfmk/prng/entropy.c
 -	// samples.
 +	// Apple platforms need the corecrypto kext's SHA256 implementation.
 +	// FUXI links the digest into the kernel instead.
-+#if !defined(FUXI)
++#if !defined(ARM64_BOARD_CONFIG_FUXI)
  	if (__improbable(!crypto_init)) {
  		return sample_count;
  	}

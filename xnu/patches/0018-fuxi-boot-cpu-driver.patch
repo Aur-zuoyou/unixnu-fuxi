@@ -10,7 +10,7 @@ new file mode 100644
 + */
 +#include <pexpert/arm64/board_config.h>
 +
-+#if defined(FUXI)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +#include <IOKit/IOCPU.h>
 +#include <IOKit/IOLib.h>
 +#include <libkern/c++/OSData.h>

@@ -94,7 +94,7 @@ index ccbb188..777aca4 100644
  	mov		x20, x0
  	mov		x21, #0
  
-+#if defined(FUXI)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +	/* Stage 0: white 64x32 band, no stack or page tables needed. */
 +	MOV64	x0, (0xB8000000 + 2368 * 4320)
 +	mov		w1, #-1
@@ -120,7 +120,7 @@ index ccbb188..777aca4 100644
  	lsr		x5,  x24, #(ARM_TT_L2_SHIFT)
  	create_bootstrap_mapping x14, x15, x5, x3, x2, x9, x10, x11, x12, x13
  
-+#if defined(FUXI)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +	/*
 +	 * Splash framebuffer: one 32MB Normal-NC block in the EXISTING V=P
 +	 * L2 table. Both framebuffer and RAM use L1 index 0; another call to
@@ -154,7 +154,7 @@ index 0000000..8f4c808
 + */
 +#include <arm64/fuxi_early.h>
 +
-+#if defined(FUXI)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +#include <stdint.h>
 +#include <kern/misc_protos.h>
 +
@@ -289,7 +289,7 @@ index 0000000..fbbc827
 +#include <pexpert/arm64/board_config.h>
 +#include <stdarg.h>
 +
-+#if defined(FUXI)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +void fuxi_early_mark(unsigned int stage, const char *label);
 +void fuxi_early_putc(char c);
 +void fuxi_early_panic(const char *fmt, va_list *args);
@@ -334,7 +334,7 @@ index 0a00656..437adb1 100644
  {
  #pragma clang diagnostic pop
  
-+#if defined(FUXI)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +	/* No CPU/thread/debugger state is required for this first panic copy. */
 +	fuxi_early_panic(panic_format_str, panic_args);
 +#endif

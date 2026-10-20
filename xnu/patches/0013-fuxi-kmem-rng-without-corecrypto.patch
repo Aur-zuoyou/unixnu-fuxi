@@ -5,7 +5,7 @@ diff --git a/osfmk/vm/vm_kern.c b/osfmk/vm/vm_kern.c
  	}
  }
  
-+#if defined(FUXI)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +/*
 + * No corecrypto kext is loaded on FUXI yet. The kmem RNG contract permits
 + * a non-cryptographic generator and requires lock-free generation. Keep
@@ -52,7 +52,7 @@ diff --git a/osfmk/vm/vm_kern.c b/osfmk/vm/vm_kern.c
  static void
  kmem_crypto_init(void)
  {
-+#if defined(FUXI)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +	vm_size_t ctx_size = sizeof(struct fuxi_kmem_rng);
 +#else
  	vm_size_t ctx_size = crypto_random_kmem_ctx_size();
@@ -63,7 +63,7 @@ diff --git a/osfmk/vm/vm_kern.c b/osfmk/vm/vm_kern.c
  
  		ks->ks_rng_ctx = zalloc_percpu_permanent(ctx_size, ZALIGN_PTR);
  		zpercpu_foreach(ctx, ks->ks_rng_ctx) {
-+#if defined(FUXI)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +			((struct fuxi_kmem_rng *)ctx)->state = early_random();
 +#else
  			crypto_random_kmem_init(ctx);
@@ -86,7 +86,7 @@ diff --git a/osfmk/vm/vm_kern.c b/osfmk/vm/vm_kern.c
  		 */
  		slot_idx = kmem_get_random16((uint16_t)num_slots - 1);
  	} else {
-+#if defined(FUXI)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +		slot_idx = fuxi_kmem_uniform(zpercpu_get(sizeclass.ks_rng_ctx), num_slots);
 +#else
  		crypto_random_uniform(zpercpu_get(sizeclass.ks_rng_ctx), num_slots,

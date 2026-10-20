@@ -38,7 +38,7 @@ new file mode 100644
 + */
 +#include <pexpert/arm64/board_config.h>
 +
-+#if defined(FUXI)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +#include <IOKit/IOPlatformExpert.h>
 +#include <IOKit/IODeviceTreeSupport.h>
 +#include <IOKit/IOLib.h>

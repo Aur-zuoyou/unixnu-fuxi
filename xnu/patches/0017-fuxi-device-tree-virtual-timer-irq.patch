@@ -14,7 +14,7 @@ diff --git a/pexpert/arm/pe_fiq.c b/pexpert/arm/pe_fiq.c
  #define GICR_WAKE_TIMEOUT_NS (1000000000ULL) // timeout for redistributor wakeup (default 1s)
  MACHINE_TIMEOUT(gicr_wake_timeout_ns, "gicr-wake-timeout", GICR_WAKE_TIMEOUT_NS, MACHINE_TIMEOUT_UNIT_NSEC, NULL);
 +
-+#if defined(FUXI)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +/* Phone default; QEMU virt wires the architected virtual timer to INTID 27. */
 +SECURITY_READ_ONLY_LATE(uint32_t) fuxi_vtimer_intid = FUXI_VTIMER_INTID;
 +#endif
@@ -26,7 +26,7 @@ diff --git a/pexpert/arm/pe_fiq.c b/pexpert/arm/pe_fiq.c
  			panic("%s: incorrect reg property size in GIC DT node; expecting 32 bytes but got %u bytes", __func__, prop_size);
  		}
 +
-+#if defined(FUXI)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +		/* Read only on the boot CPU, before the GIC and RO-late lockdown. */
 +		void const *timer_prop;
 +		unsigned int timer_size;

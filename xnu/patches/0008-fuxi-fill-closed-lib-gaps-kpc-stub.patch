@@ -330,7 +330,7 @@ index c803e4e..c90ec1a 100644
  	return dec;
  }
  
-+#if defined(FUXI)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +/*
 + * fuxi: arm_vm_init() calls this unconditionally; Apple's definition (it
 + * enters the PPL/monitor) ships only in the closed per-SoC library. There is

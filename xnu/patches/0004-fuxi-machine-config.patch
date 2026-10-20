@@ -66,7 +66,7 @@ index c40c6ea..9888608 100644
  #endif
  
  
-+#if defined(FUXI)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +	/*
 +	 * fuxi: TrustZone owns GIC Group 0, so the timer and IPIs that other
 +	 * ARM64 targets take as FIQs arrive here as Group 1 IRQs.
@@ -122,7 +122,7 @@ index e5336e5..f8d0d2e 100644
  	isb		sy
  
 -#if !VMAPPLE
-+#if !VMAPPLE && !defined(FUXI)
++#if !VMAPPLE && !defined(ARM64_BOARD_CONFIG_FUXI)
  	MOV64   x1, SCTLR_EL1_DEFAULT
  	cmp		x0, x1
  	bne		.
@@ -139,7 +139,7 @@ index 3ad743f..4ec6989 100644
  		}
  	}
  
-+#if defined(FUXI)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +	/*
 +	 * Real hardware with two security states: Group 0 is TrustZone's and
 +	 * non-secure writes to it are ignored. Everything we own is Group 1 NS
@@ -165,7 +165,7 @@ index 3ad743f..4ec6989 100644
  	__builtin_arm_wsr64("ICC_SRE_EL1", icc_sre);
  	__builtin_arm_isb(ISB_SY);
  
-+#if defined(FUXI)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +	__builtin_arm_wsr64("ICC_BPR1_EL1", 0);
 +#else
  	// Set priority masks and binary point for group 0
@@ -178,7 +178,7 @@ index 3ad743f..4ec6989 100644
  	icc_ctlr &= ~ICC_CTLR_EOIMODE;
  	__builtin_arm_wsr64("ICC_CTLR_EL1", icc_ctlr);
  
-+#if defined(FUXI)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +	// ABL leaves only ARE_NS set; Linux writes ARE_NS | EnableGrp1A | EnableGrp1
 +	uint32_t gicd_ctlr = gicd_read32(GICD_CTLR);
 +	gicd_ctlr |= GICD_CTLR_ARE_NS | GICD_CTLR_ENABLEGRP1A | GICD_CTLR_ENABLEGRP1;

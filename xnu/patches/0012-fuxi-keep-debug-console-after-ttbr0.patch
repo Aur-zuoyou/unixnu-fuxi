@@ -5,7 +5,7 @@ diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
  #define ARM64_PHYSMAP_ALIGNMENT_PADDING (PTOV_TABLE_SIZE * ARM_TT_TWIG_SIZE)
  #endif
  
-+#if defined(FUXI)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +/*
 + * The reserved low-globals/kernel region is excluded from VM allocation.
 + * Use the otherwise empty 32MB block above low globals and below gVirtBase
@@ -38,7 +38,7 @@ diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
  
  	arm_set_user_tbi();
  
-+#if defined(FUXI)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +	/* phystokv() must still refer to the bootstrap aperture here. */
 +	fuxi_early_map_final();
 +#endif
@@ -49,7 +49,7 @@ diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
  
 -	/* The framebuffer VA=PA mapping belongs to the outgoing TTBR0. */
 -	fuxi_early_disable();
-+#if defined(FUXI)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +	/* The final TTBR1 is live; leave the outgoing VA=PA framebuffer alias. */
 +	fuxi_early_relocate(FUXI_EARLY_FB_VA);
 +#endif
@@ -164,7 +164,7 @@ diff --git a/osfmk/arm64/fuxi_early.h b/osfmk/arm64/fuxi_early.h
  #include <stdarg.h>
 +#include <stdint.h>
  
- #if defined(FUXI)
+ #if defined(ARM64_BOARD_CONFIG_FUXI)
  void fuxi_early_mark(unsigned int stage, const char *label);
  void fuxi_early_putc(char c);
  void fuxi_early_panic(const char *fmt, va_list *args);
