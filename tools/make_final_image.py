@@ -54,10 +54,10 @@ def main() -> int:
          "--cmdline", "debug=0xc serial=3 cpus=1 keepsyms=1 -v"],
         capture_output=True, text=True, encoding="utf-8", errors="replace",
         cwd=r"E:\ios-on-fuxi")
-    for line in (r.stdout or "").split("\n"):
-        if line.strip():
-            print("  " + line.strip())
     if r is not None:
+        for line in (r.stdout or "").split("\n"):
+            if line.strip():
+                print("  " + line.strip())
         if r.returncode != 0:
             print(r.stderr[-800:])
             return 1
