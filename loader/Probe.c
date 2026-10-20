@@ -910,11 +910,6 @@ OnTextOut (
 
         /* 自测已通过（整屏变红 = 关 MMU/缓存正确），现在真正跳 XNU */
 
-        /* 跳转前把整屏刷成品红色：看到品红 = 加载器执行到位 */
-        Fill (0xFFFF00FF);
-        mLogY = 40;
-        XnuScreenLog ("PREJUMP", (UINT64) 0);
-
         XnuBootRun ((mXnuBufSize > 0) ? mXnuBuf : XnuPayloadAddr (),
                     (mXnuBufSize > 0) ? mXnuBufSize : XnuPayloadSize (),
                     (UINTN) mFb, (UINTN) mFbPitch, mFbW, mFbH, XnuScreenLog);
