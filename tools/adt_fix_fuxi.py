@@ -99,6 +99,24 @@ def set_fbcon_reg(node):
     return False
 
 
+VTIMER_INTID = 19   # fuxi 真机（DT: GIC_PPI 3）；QEMU/sweet 是 27
+
+
+def set_vtimer_intid(node):
+    """把 gic 节点的 virtual-timer-intid 改成 fuxi 的真值"""
+    if node_name(node) == b"gic":
+        found = False
+        for i, (key, flags, val) in enumerate(node.props):
+            if key == "virtual-timer-intid":
+                node.props[i] = (key, flags, struct.pack("<I", VTIMER_INTID))
+                found = True
+        return found
+    for c in node.children:
+        if set_vtimer_intid(c):
+            return True
+    return False
+
+
 def main() -> int:
     if len(sys.argv) < 3:
         print(__doc__)
@@ -110,6 +128,7 @@ def main() -> int:
     dram_ok = set_chosen_dram(root)
     gic_ok = set_gic_absolute(root)
     fb_ok = set_fbcon_reg(root)
+    timer_ok = set_vtimer_intid(root)
     blob = adt.serialize(root)
     open(dst, "wb").write(blob)
 
@@ -117,6 +136,7 @@ def main() -> int:
     print(f"chosen dram 已设置: {dram_ok}")
     print(f"gic 改成绝对地址: {gic_ok}")
     print(f"fbcon 帧缓冲: {fb_ok}")
+    print(f"vtimer INTID={VTIMER_INTID}: {timer_ok}")
     print(f"输出: {dst}  {len(blob):,} 字节")
 
     if "--dump" in sys.argv:
