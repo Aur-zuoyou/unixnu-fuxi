@@ -1,10 +1,8 @@
 diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 --- a/osfmk/arm64/start.s
 +++ b/osfmk/arm64/start.s
-@@ -457,4 +457,20 @@
+@@ -457,3 +457,19 @@
  LEXT(start_first_cpu)
- 
- 	// Unlock the core for debugging
 +
 +	/* fuxi 决定性实验：画 64 行品红色块，然后停机。 */
 +	/* 看到色块 = 内核确实执行到了 start_first_cpu。 */
@@ -22,3 +20,4 @@ diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 +	wfi
 +	b	2b
  
+ 	// Unlock the core for debugging
