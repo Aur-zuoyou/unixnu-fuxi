@@ -1,15 +1,16 @@
 diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 --- a/osfmk/arm64/start.s
 +++ b/osfmk/arm64/start.s
-@@ -220,4 +220,17 @@
+@@ -220,4 +220,18 @@
  	.align	3
  	.globl EXT(_start)
  LEXT(_start)
 +
-+	/* fuxi: 整屏刷绿后停机（插在 _start 标签之后，保证能被入口点执行到） */
++	/* fuxi: 把屏幕上部 256 行刷绿后停机。 */
++	/* 只写 1MB，避免 MMU 关闭下 260 万次 Device 写太慢。 */
 +	MOV64	x9, 0xB0000000
 +	MOV64	x10, 0x0000FF00
-+	MOV64	x11, 2592000
++	MOV64	x11, 276480		// 256 行 * 1080
 +	1:
 +	str	w10, [x9], #4
 +		subs	x11, x11, #1
