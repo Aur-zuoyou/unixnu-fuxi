@@ -132,10 +132,35 @@ index e5336e5..f8d0d2e 100644
  #if (!CONFIG_KERNEL_INTEGRITY || (CONFIG_KERNEL_INTEGRITY && !defined(KERNEL_INTEGRITY_WT)))
  	/* Watchtower
 diff --git a/pexpert/arm/pe_fiq.c b/pexpert/arm/pe_fiq.c
-index 3ad743f..4ec6989 100644
+index 3ad743f..9ecd5c6 100644
 --- a/pexpert/arm/pe_fiq.c
 +++ b/pexpert/arm/pe_fiq.c
-@@ -141,11 +141,25 @@ pe_init_fiq()
+@@ -50,6 +50,24 @@ find_gicr_pe_base()
+ 	// We only care about aff1 and aff0
+ 	uint32_t phys_id = __builtin_arm_rsr64("MPIDR_EL1") & (MPIDR_AFF1_MASK | MPIDR_AFF0_MASK);
+ 
++#if defined(ARM64_BOARD_CONFIG_FUXI)
++	/*
++	 * fuxi(SM8550) 的 redistributor 是固定布局：基址 0x17180000，每个 0x40000，
++	 * 共 8 个（0x200000）。原来的线性扫描（按 TYPER affinity 匹配、步长
++	 * GICR_PE_SIZE）在这台机器上会走到区间外，触发同步外部中止（panic 在
++	 * pe_init_fiq）。这里直接按 MPIDR 的 Aff0 索引。
++	 */
++	{
++		uint32_t idx = phys_id & 0xFF;
++
++		if (((uint64_t)(idx + 1) * GICR_PE_SIZE) <= gicr_size) {
++			return gicr_base + (vm_offset_t)idx * GICR_PE_SIZE;
++		}
++		panic("%s: core %u out of GICR range (idx=%u size=%lu)",
++		    __func__, ml_get_cpu_number(phys_id), idx, (unsigned long)gicr_size);
++	}
++#endif
++
+ 	for (vm_offset_t offset = 0; offset < gicr_size; offset += GICR_PE_SIZE) {
+ 		vm_offset_t gicr_pe_base = gicr_base + offset;
+ 		uint64_t gicr_typer = gicr_read64(GICR_TYPER);
+@@ -141,11 +159,25 @@ pe_init_fiq()
  		}
  	}
  
@@ -161,7 +186,7 @@ index 3ad743f..4ec6989 100644
  
  	// Enable system register access
  	uint64_t icc_sre = __builtin_arm_rsr64("ICC_SRE_EL1");
-@@ -153,8 +167,12 @@ pe_init_fiq()
+@@ -153,8 +185,12 @@ pe_init_fiq()
  	__builtin_arm_wsr64("ICC_SRE_EL1", icc_sre);
  	__builtin_arm_isb(ISB_SY);
  
@@ -174,7 +199,7 @@ index 3ad743f..4ec6989 100644
  	__builtin_arm_wsr64("ICC_PMR_EL1", 0xFF);
  
  	// Set EOI mode of this processor
-@@ -162,12 +180,24 @@ pe_init_fiq()
+@@ -162,12 +198,24 @@ pe_init_fiq()
  	icc_ctlr &= ~ICC_CTLR_EOIMODE;
  	__builtin_arm_wsr64("ICC_CTLR_EL1", icc_ctlr);
  
