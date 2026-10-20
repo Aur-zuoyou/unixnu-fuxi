@@ -35,7 +35,7 @@ permissions:
   contents: read
 
 env:
-  UEFI_SRC_KEY: uefi-src-v2
+  UEFI_SRC_KEY: uefi-src-v3
 
 jobs:
   build:
@@ -90,6 +90,20 @@ jobs:
       - name: 校验关键路径
         run: |
           set -eux
+          # DarwinBoot 是唯一的引导器，必须完整；缺了说明缓存里的 UniXNU 不完整
+          DB="$GITHUB_WORKSPACE/UniXNU/drivers/DarwinBoot/DarwinBootPkg/Driver/DarwinBoot.inf"
+          if [ ! -f "$DB" ]; then
+            echo "UniXNU 不完整（缺 DarwinBoot.inf），强制重新克隆"
+            rm -rf "$GITHUB_WORKSPACE/UniXNU"
+            for attempt in 1 2 3; do
+              git clone --depth 1 https://github.com/UniXNU/UniXNU.git \
+                "$GITHUB_WORKSPACE/UniXNU" && break
+              echo "重试 $attempt"; sleep 20; rm -rf "$GITHUB_WORKSPACE/UniXNU"
+            done
+          fi
+          ls -l "$DB"
+          ls "$GITHUB_WORKSPACE/UniXNU/drivers"
+
           MU_BASE="$GITHUB_WORKSPACE/UniXNU/package/Mu_Basecore"
           if [ ! -d "$MU_BASE/BaseTools" ]; then
             echo "Mu_Basecore 不在 $MU_BASE，重新克隆"
