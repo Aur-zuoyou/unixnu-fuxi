@@ -111,7 +111,7 @@ const char *loader_boot(uintptr_t dtb)
 	 * （ESR 0x96000010 / FAR 0x101004000），所以内核放到低区。
 	 */
 	const uint64_t FUXI_LOW_PHYS = 0x90000000ULL;
-	const uint64_t FUXI_LOW_SIZE = 0x70000000ULL;
+	const uint64_t FUXI_LOW_SIZE = 0x17000000ULL;   /* 到 0xA7000000，避开 shim 自身(约 0xA8080000) */
 	uint64_t phys_base = FUXI_LOW_PHYS;
 	uint64_t mem_size  = FUXI_LOW_SIZE;
 
