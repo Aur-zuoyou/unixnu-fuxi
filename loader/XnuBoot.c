@@ -322,7 +322,7 @@ XnuBootRun (
    */
   {
     volatile UINT32  *Fb = (volatile UINT32 *)FbBase;
-    UINTN             Pixels = (UINTN)FbPitch * (UINTN)FbHeight / 4;
+    UINTN             Pixels = (UINTN)FbPitch * (UINTN)FbHeight;   // FbPitch 单位是像素，不要再除 4
     UINTN             k;
 
     for (k = 0; k < Pixels; k++) {

@@ -51,6 +51,18 @@ AsmXnuJump:
     isb
     dsb     sy
 
+    // ---------------- MARKER_AFTER_MMU_OFF ----------------
+    // MMU 已关，先往帧缓冲左上角画一块 64x64 的绿色方块。
+    // 看到绿色 = 关 MMU 之后的写显存正常 -> 问题只剩 br 指令。
+    mov     x5, #0xB0000000
+    mov     x6, #138240          // 128 行 * 1080
+    mov     w7, #0x0000FF00
+3:
+    str     w7, [x5], #4
+    subs    x6, x6, #1
+    b.ne    3b
+    dsb     sy
+
     mov     x0, x4
     br      x3
 .size   AsmXnuJump, . - AsmXnuJump
