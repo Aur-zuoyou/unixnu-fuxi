@@ -53,6 +53,13 @@ ls -l "$OUT/Image"
 if [ -n "${PAYLOAD_FILE:-}" ]; then
   echo "=== 内嵌 payload ==="
   cat "$PAYLOAD_FILE" >> "$OUT/Image"
+
+  # ARM64 Image 头里的 image_size（偏移 0x10）改成实际总大小：
+  # ABL 可能用它做校验/决定复制多少字节。
+  TOTAL=$(stat -c%s "$OUT/Image")
+  printf '%08x' "$TOTAL" | sed 's/\(..\)\(..\)\(..\)\(..\)/\4\3\2\1/' | xxd -r -p | \
+    dd of="$OUT/Image" bs=1 seek=16 conv=notrunc status=none
+  echo "  image_size 字段 -> $TOTAL"
 fi
 
 echo "=== shim 编译完成 ==="
