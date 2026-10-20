@@ -1,15 +1,15 @@
 diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 --- a/osfmk/arm64/start.s
 +++ b/osfmk/arm64/start.s
-@@ -220,4 +220,18 @@
+@@ -220,4 +220,17 @@
  	.align	3
  	.globl EXT(_start)
+ LEXT(_start)
 +
-+	/* fuxi: 把整屏刷成绿色，然后停机。 */
-+	/* 看到绿屏 = 内核代码从 _start 起点就在执行。 */
++	/* fuxi: 整屏刷绿后停机（插在 _start 标签之后，保证能被入口点执行到） */
 +	MOV64	x9, 0xB0000000
-+	MOV64	x10, 0x0000FF00		// 绿
-+	MOV64	x11, 2592000		// 1080 * 2400
++	MOV64	x10, 0x0000FF00
++	MOV64	x11, 2592000
 +	1:
 +	str	w10, [x9], #4
 +		subs	x11, x11, #1
@@ -18,5 +18,4 @@ diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 +	2:
 +	wfi
 +	b	2b
- LEXT(_start)
  	b	EXT(start_first_cpu)
