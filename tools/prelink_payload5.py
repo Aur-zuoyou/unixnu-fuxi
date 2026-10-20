@@ -17,6 +17,7 @@ sys.path.insert(0, r"E:\download\UniXNU\kits\NativePrelink")
 
 import mkpayload_fuxi as mp
 from prelink_try2 import load_kc, normalize_info, tolerant_macho, strip_ctf, KC_KERNEL_OFF
+import component_headers, prelink_text_rebuild
 
 KERNEL = sys.argv[1] if len(sys.argv) > 1 else r"E:\download\xnu-kernel-23\out\kernel.development.fuxi"
 ADT = sys.argv[2] if len(sys.argv) > 2 else r"E:\ios-on-fuxi\rom\xnu\fuxi.adt"
@@ -76,7 +77,8 @@ def patch_macho_segments(text_data: bytearray, updates: dict) -> int:
 
 
 def build_info_xml(entries_dict, selected, mapping):
-    """从原始 prelink info 里取选中组件，重写地址字段，输出 XML"""
+    """从原始 prelink info 里取选中组件，重写地址字段，输出 Apple 风格的 XML"""
+
     def map_va(old):
         for lo, hi, delta in mapping:
             if lo <= old < hi:
@@ -87,6 +89,8 @@ def build_info_xml(entries_dict, selected, mapping):
     ET.SubElement(root, "key").text = "_PrelinkInfoDictionary"
     arr = ET.SubElement(root, "array")
 
+    ADDR_KEYS = ("_PrelinkExecutableLoadAddr", "_PrelinkExecutableSourceAddr",
+                 "_PrelinkKmodInfo")
     kept = 0
     for ident in selected:
         src = entries_dict.get(ident)
@@ -97,32 +101,26 @@ def build_info_xml(entries_dict, selected, mapping):
             if key not in src:
                 continue
             val = src[key]
+            ET.SubElement(d, "key").text = key
             if isinstance(val, dict):
                 sub = ET.SubElement(d, "dict")
                 for k2, v2 in val.items():
-                    ET.SubElement(d, "key").text = k2
-                    ET.SubElement(d, "string").text = str(v2)
-                continue
-            if key in ("_PrelinkExecutableLoadAddr", "_PrelinkExecutableSourceAddr",
-                       "_PrelinkKmodInfo") and isinstance(val, int):
-                new = map_va(val)
-                if new is None:
-                    new = val
-                ET.SubElement(d, "key").text = key
-                el = ET.SubElement(d, "integer", {"size": "64"})
-                el.text = hex(new)
-                continue
-            ET.SubElement(d, "key").text = key
-            if isinstance(val, bool):
+                    ET.SubElement(sub, "key").text = k2
+                    ET.SubElement(sub, "string").text = str(v2)
+            elif isinstance(val, bool):
                 ET.SubElement(d, "true" if val else "false")
             elif isinstance(val, int):
+                if key in ADDR_KEYS:
+                    mapped = map_va(val)
+                    if mapped is not None:
+                        val = mapped
                 el = ET.SubElement(d, "integer", {"size": "64"})
                 el.text = hex(val)
             else:
                 ET.SubElement(d, "string").text = str(val)
         kept += 1
-    xml = ET.tostring(root, encoding="utf-8")
-    return xml, kept
+    body = ET.tostring(root, encoding="utf-8")
+    return body, kept
 
 
 def main() -> int:
@@ -192,6 +190,14 @@ def main() -> int:
         new_segs.append(dict(name=cname, vmaddr=seg_va, vmsize=vsize, data=bytes(buf)))
         cursor = align(seg_va + vsize)
         print(f"   {cname:<18} va=0x{seg_va:x} vsize=0x{vsize:x}")
+
+    print("③b 重写组件 Mach-O 段/节地址 + 每个 kext 头部之后清零（符合 XNU 遍历模型）")
+    for s in new_segs:
+        if s["name"] == "__PRELINK_TEXT":
+            buf = bytearray(s["data"])
+            component_headers.remap(buf, mapping, verbose=True)
+            s["data"] = bytes(buf)
+            break
 
     print("④ 生成 __PRELINK_INFO")
     xml, kept = build_info_xml(entries, r["components"], mapping)

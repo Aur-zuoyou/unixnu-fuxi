@@ -15,6 +15,8 @@
 #define BOOT_LINE_LENGTH	608
 #define PAGE_16K		0x4000UL
 
+extern char _head[], _end[];		/* start.S 里的镜像边界（mmu.c 也用） */
+
 struct payload_seg {
 	uint64_t vmaddr, vmsize, file_off, file_size;
 };
@@ -56,6 +58,22 @@ static void copy64(uintptr_t dst, uintptr_t src, uint64_t n)
 	volatile const uint64_t *s = (volatile const uint64_t *)src;
 	for (uint64_t i = 0; i < (n + 7) / 8; i++)
 		d[i] = s[i];
+}
+
+/*
+ * dc civac over [start, end)：清并无效化整段 D-cache。
+ * 关 MMU/缓存前必须做，否则 XNU 关缓存后读到的是主存里的旧数据。
+ */
+static void dc_civac_range(uintptr_t start, uintptr_t end)
+{
+	uint64_t ctr;
+	uint64_t line;
+
+	__asm__ volatile("mrs %0, ctr_el0" : "=r"(ctr));
+	line = 4UL << ((ctr >> 16) & 0xf);
+	for (uintptr_t a = start & ~(line - 1); a < end; a += line)
+		__asm__ volatile("dc civac, %0" : : "r"(a) : "memory");
+	__asm__ volatile("dsb sy" ::: "memory");
 }
 
 static void zero64(uintptr_t dst, uint64_t n)
@@ -189,7 +207,39 @@ const char *loader_boot(uintptr_t dtb)
 	}
 	con_str("XNU", "jumping (fbcon clears screen)");
 
+	/*
+	 * 交给 XNU 之前必须回到 iBoot 那种"裸机"状态：
+	 *   1) 关掉所有中断/调试异常（DAIF）
+	 *   2) 把内核占用区完整刷清 D-cache（dc civac），否则关缓存后 XNU
+	 *      读到的是主存里的旧数据
+	 *   3) 关 SCTLR_EL1 的 M/C/I —— XNU 的 start.s 会自己建页表、开 MMU，
+	 *      它假设进来时 MMU 与缓存都是关的
+	 */
+	__asm__ volatile("msr daifset, #15" ::: "memory");
+
+	dc_civac_range(phys_base, top);			/* 内核 + ADT + boot_args */
+	dc_civac_range(src, src + p->adt_off + p->adt_size);	/* payload 本体 */
+	dc_civac_range((uintptr_t)_head, (uintptr_t)_end);	/* shim 自身（WB 映射） */
+
 	__asm__ volatile("dsb sy; ic iallu; dsb sy; isb" ::: "memory");
+
+	{
+		uint64_t sctlr;
+
+		__asm__ volatile("mrs %0, sctlr_el1" : "=r"(sctlr));
+		con_hex("SCTLR-OLD", sctlr);
+		sctlr &= ~((1ULL << 0) | (1ULL << 2) | (1ULL << 12));	/* M, C, I */
+		__asm__ volatile("msr sctlr_el1, %0" :: "r"(sctlr) : "memory");
+		__asm__ volatile("isb" ::: "memory");
+		{
+			uint64_t now;
+
+			__asm__ volatile("mrs %0, sctlr_el1" : "=r"(now));
+			con_hex("SCTLR-NEW", now);
+		}
+	}
+	__asm__ volatile("dsb sy; isb" ::: "memory");
+
 	((xnu_entry_t)entry_pa)(ba_pa);
 	return "xnu returned";
 }
