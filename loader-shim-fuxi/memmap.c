@@ -10,6 +10,7 @@
 #include "console.h"
 
 #define BLOCK_SIZE	(64UL << 20)	/* 与 XNU 的 L2 块映射粒度一致 */
+#define SLACK		(16UL << 20)	/* 内核窗口在 need 之外留的余量 */
 #define FDT_MAGIC	0xd00dfeed
 
 static uint32_t be32(uintptr_t a)
@@ -111,24 +112,36 @@ done:
 	 * 在最大连续段里步进扫描，找到第一个不和自己重叠的位置。
 	 * payload 内嵌在 shim 镜像末尾，内核窗口必须完全避开它，
 	 * 否则拷贝过程会把仍在读取的源数据冲掉。
+	 *
+	 * 注意 size 不能只取 need：内核会把 topOfKernelData 之后的空间也算进
+	 * physmap 的可用范围，窗口必须比 need 留出余量，否则建表时越界。
 	 */
 	{
 		uint64_t lo = (best_lo + BLOCK_SIZE - 1) & ~(BLOCK_SIZE - 1);
 		uint64_t lowbits = align_low & (BLOCK_SIZE - 1);
+		uint64_t want = need + SLACK;
 
 		lo |= lowbits;
 		if (lo < best_lo)
 			lo += BLOCK_SIZE;
 
-		for (uint64_t cand = lo; cand + need <= best_hi; cand += BLOCK_SIZE) {
-			int clash = avoid_hi > avoid_lo &&
-			    cand < avoid_hi && cand + need > avoid_lo;
+		/*
+		 * 先按 want 找；找不到再用 need 找（此时尽量减少 size，避免冲突），
+		 * 最后仍不行才算失败。
+		 */
+		for (int pass = 0; pass < 2; pass++) {
+			uint64_t sz = pass == 0 ? want : need;
 
-			if (clash)
-				continue;
-			*base = cand;
-			*size = need;	/* 只占实际需要的量，别把整段都圈进来 */
-			return 1;
+			for (uint64_t cand = lo; cand + sz <= best_hi; cand += BLOCK_SIZE) {
+				int clash = avoid_hi > avoid_lo &&
+				    cand < avoid_hi && cand + sz > avoid_lo;
+
+				if (clash)
+					continue;
+				*base = cand;
+				*size = sz;
+				return 1;
+			}
 		}
 		return 0;
 	}
