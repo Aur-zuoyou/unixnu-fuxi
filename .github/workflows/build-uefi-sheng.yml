@@ -52,7 +52,6 @@ jobs:
             UniXNU
             UniXNU-sheng
             uefi-sheng
-            Mu_Basecore
           key: ${{ env.UEFI_SRC_KEY }}-${{ hashFiles('.github/workflows/build-uefi-sheng.yml') }}
 
       - name: 克隆全部源码（缓存未命中时）
@@ -81,9 +80,31 @@ jobs:
           cd ..
 
           # Mu 基座：脚本里 EDK_TOOLS_PATH=$UNIXNU_ROOT/package/Mu_Basecore/BaseTools
-          clone_retry Mu_Basecore  https://github.com/microsoft/mu_basecore.git \
+          mkdir -p UniXNU/package
+          clone_retry UniXNU/package/Mu_Basecore \
+            https://github.com/microsoft/mu_basecore.git \
             --depth 1 --branch release/202608
-          du -sh UniXNU UniXNU-sheng uefi-sheng Mu_Basecore
+          du -sh UniXNU UniXNU-sheng uefi-sheng UniXNU/package/Mu_Basecore
+
+      # 缓存命中时也要保证关键路径存在（早期缓存的 key 可能不完整）
+      - name: 校验关键路径
+        run: |
+          set -eux
+          MU_BASE="$GITHUB_WORKSPACE/UniXNU/package/Mu_Basecore"
+          if [ ! -d "$MU_BASE/BaseTools" ]; then
+            echo "Mu_Basecore 不在 $MU_BASE，重新克隆"
+            rm -rf "$MU_BASE"
+            mkdir -p "$(dirname "$MU_BASE")"
+            for attempt in 1 2 3; do
+              git clone --depth 1 --branch release/202608 \
+                https://github.com/microsoft/mu_basecore.git "$MU_BASE" && break
+              echo "重试 $attempt"; sleep 20
+            done
+          fi
+          ls "$MU_BASE/BaseTools" | head
+          for d in UniXNU UniXNU-sheng uefi-sheng; do
+            ls -d "$GITHUB_WORKSPACE/$d" || { echo "缺少 $d"; exit 1; }
+          done
 
       - name: 安装依赖
         run: |
