@@ -193,7 +193,12 @@ const char *loader_boot(uintptr_t dtb)
 	ba->physBase = phys_base;
 	ba->memSize = mem_size;
 	ba->topOfKernelData = top;
-	ba->Video.v_baseAddr = FB_BASE;
+	/*
+	 * XNU 的 video_console 约定：v_baseAddr 最低位为 1 表示"这是物理地址，
+	 * 内核自己建映射"；为 0 且 kernel_map 已建立时会被当成虚拟地址直接用，
+	 * 那样 0xB8000000 在 EL1 下访问不到 → 清屏后黑屏。
+	 */
+	ba->Video.v_baseAddr = FB_BASE | 1;
 	ba->Video.v_display = 1;
 	ba->Video.v_rowBytes = FB_STRIDE;
 	ba->Video.v_width = FB_W;

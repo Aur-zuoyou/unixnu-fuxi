@@ -11,7 +11,8 @@ import subprocess
 import sys
 
 KERNEL = r"E:\download\xnu-kernel-20\out\kernel.development.fuxi"
-SHIM_IMG = r"E:\download\shim13-img.bin"
+import os as _os
+SHIM_IMG = _os.environ.get("SHIM_IMG", r"E:\download\shim13-img.bin")
 ADT = r"E:\ios-on-fuxi\rom\xnu\fuxi.adt"
 DTB = r"E:\ios-on-fuxi\rom\device\fuxi_runtime.dtb"
 OUT_IMG = r"E:\download\boot-shim-final.img"
