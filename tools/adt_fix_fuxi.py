@@ -29,8 +29,12 @@ NEW = b"fuxi"
 DRAM_BASE = 0x42000000
 DRAM_SIZE = 0x7e000000
 
-GICD, GICD_SIZE = 0x17100000 - 0x01000000, 0x10000   # 相对 /soc（XNU 会加 soc_base_phys=0x01000000）
-GICR, GICR_SIZE = 0x17180000 - 0x01000000, 0x200000
+GICD_ABS, GICD_SIZE = 0x17100000, 0x10000   # fuxi 真机 GICD 绝对地址
+GICR_ABS, GICR_SIZE = 0x17180000, 0x200000   # fuxi 真机 GICR 绝对地址
+# 注意：必须给绝对地址，因为 arm-io.ranges 会被归零（见 clear_soc_ranges）。
+# 之前这里给的是 0x16100000（= 0x17100000 - 0x01000000）并假设 XNU 会加
+# soc_base_phys=0x01000000，但 fuxi 的 ranges[1] 实际是 0x18，
+# 算出来的 0x16180018 在真机上不存在 → pe_init_fiq 外部中止。
 
 
 def node_name(node):
@@ -75,12 +79,35 @@ def set_gic_absolute(node):
                 node.props[i] = (
                     key,
                     flags,
-                    struct.pack("<4Q", GICD, GICD_SIZE, GICR, GICR_SIZE),
+                    struct.pack("<4Q", GICD_ABS, GICD_SIZE, GICR_ABS, GICR_SIZE),
                 )
                 return True
         return False
     for c in node.children:
         if set_gic_absolute(c):
+            return True
+    return False
+
+
+def clear_soc_ranges(node):
+    """
+    XNU 的 pe_arm_get_soc_base_phys() 取 arm-io 节点 ranges 的第二个 u64 当
+    soc_base_phys，再用 soc_base_phys + gic_reg 得到 GIC 物理地址。
+    fuxi 的 ADT 里 ranges[1] 是 0x18（不是 0x01000000），会算出 0x16180018
+    这种不存在的主机地址 → pe_init_fiq 写 GICR 时外部中止。
+    这里把 ranges 的物理地址项归零，配合上面的绝对 GIC 地址。
+    """
+    if node_name(node) == b"arm-io":
+        for i, (key, flags, val) in enumerate(node.props):
+            if key == "ranges" and len(val) >= 24:
+                new = bytearray(val)
+                # ranges = <child parent size>，每项都是 u64；soc_base 取第二项
+                struct.pack_into("<Q", new, 8, 0)
+                node.props[i] = (key, flags, bytes(new))
+                return True
+        return False
+    for c in node.children:
+        if clear_soc_ranges(c):
             return True
     return False
 
@@ -130,6 +157,7 @@ def main() -> int:
     renamed = rename_in_tree(root)
     dram_ok = set_chosen_dram(root)
     gic_ok = set_gic_absolute(root)
+    soc_ok = clear_soc_ranges(root)
     fb_ok = set_fbcon_reg(root)
     timer_ok = set_vtimer_intid(root)
     blob = adt.serialize(root)
@@ -138,6 +166,7 @@ def main() -> int:
     print(f"改名属性数: {renamed}")
     print(f"chosen dram 已设置: {dram_ok}")
     print(f"gic 改成绝对地址: {gic_ok}")
+    print(f"arm-io ranges 归零: {soc_ok}")
     print(f"fbcon 帧缓冲: {fb_ok}")
     print(f"vtimer INTID={VTIMER_INTID}: {timer_ok}")
     print(f"输出: {dst}  {len(blob):,} 字节")

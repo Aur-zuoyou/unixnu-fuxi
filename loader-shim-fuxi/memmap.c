@@ -41,6 +41,7 @@ static uintptr_t skip_str(uintptr_t p)
  * 返回 1 表示找到窗口，填 *base / *size（size 至少需要的 need，且尽量大）。
  */
 int shim_pick_window(uintptr_t fdt, uint64_t need, uint64_t align_low,
+                     uint64_t avoid_lo, uint64_t avoid_hi,
                      uint64_t *base, uint64_t *size)
 {
 	uintptr_t p, strings;
@@ -120,6 +121,26 @@ done:
 			cand |= align_low & (BLOCK_SIZE - 1);
 			if (cand < best_lo)
 				cand = best_lo;
+		}
+
+		/*
+		 * 必须避开我们自己：payload 内嵌在 shim 镜像末尾，内核窗口
+		 * 如果盖住它，拷贝过程会把仍在读取的源数据冲掉。
+		 * 优先往上让（内核窗口放在 payload 之上）。
+		 */
+		if (avoid_hi > avoid_lo &&
+		    cand < avoid_hi && cand + need > avoid_lo) {
+			uint64_t up = (avoid_hi + BLOCK_SIZE - 1) & ~(BLOCK_SIZE - 1);
+			up |= align_low & (BLOCK_SIZE - 1);
+			if (up + need <= best_hi) {
+				cand = up;
+			} else if (avoid_lo > best_lo && avoid_lo - best_lo >= need) {
+				/* 放不下就塞到 payload 之下 */
+				cand = (avoid_lo - need) & ~(BLOCK_SIZE - 1);
+				cand |= align_low & (BLOCK_SIZE - 1);
+			} else {
+				return 0;
+			}
 		}
 		*base = cand;
 		*size = best_hi - cand;

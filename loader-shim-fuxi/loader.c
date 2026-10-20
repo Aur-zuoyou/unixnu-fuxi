@@ -136,8 +136,15 @@ const char *loader_boot(uintptr_t dtb)
 	{
 		uint64_t need = (p->kernel_end - p->virt_base) + p->adt_size + 3 * PAGE_16K;
 		uint64_t pick_base = 0, pick_size = 0;
+		/*
+		 * payload 内嵌在 shim 镜像末尾：从 src 一直到 src + adt_off + adt_size
+		 * 都还会被读，窗口必须避开这段，否则边拷边覆盖。
+		 */
+		uint64_t avoid_lo = src;
+		uint64_t avoid_hi = src + p->adt_off + p->adt_size;
 
-		if (shim_pick_window(dtb, need, p->virt_base, &pick_base, &pick_size)) {
+		if (shim_pick_window(dtb, need, p->virt_base, avoid_lo, avoid_hi,
+		    &pick_base, &pick_size)) {
 			phys_base = pick_base;
 			mem_size = pick_size;
 			con_hex2("MEMWIN", "dyn base=", phys_base, "size=", mem_size);
