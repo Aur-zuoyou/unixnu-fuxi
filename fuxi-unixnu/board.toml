@@ -1,29 +1,26 @@
-# Board description of the Xiaomi Pad 6S Pro (sheng, SM8550), read by the unixnu build driver.
+# Board description of the Xiaomi 13 (fuxi, SM8550), read by the unixnu build driver.
+# Derived from UniXNU-sheng (same SoC); GIC/DRAM/timebase/UFS values independently
+# verified on fuxi hardware during bring-up.
 
 [board]
 name = "fuxi"
 soc = "SM8550"
 description = "Xiaomi 13 (SM8550)"
-kit = "sheng"                      # the package/ of this repository appears as kits/sheng in the build tree
+kit = "fuxi"                       # this repository package appears as kits/fuxi in the build tree
 
 # The target OS image: the unchanged iPad7,1 iPadOS 17.7.11 restore image. Give --ipsw PATH to use a local file; without
 # it the remote url is read with range requests, only the members that are needed.
 [ipsw]
-url = "https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw"
-product = "iPad7,1"
-version = "17.7.11"
-build = "21H461"
-device_class = "j120ap"
-chip_id = 0x8011
-board_id = 12
-fetch = ["KernelCache", "DeviceTree", "StaticTrustCache", "Cryptex1,SystemTrustCache"]   # the small components
+# 目标：iPhone X (iPhone10,3 / iPhone10,6) iOS 16.7.16
+url = ""                          # 用 --ipsw PATH 指定本地文件，不走远程
+product = "iPhone10,3"
+version = "16.7.16"
+build = "20H392"
+device_class = "d22ap"            # DeviceTree.d22ap.im4p
+chip_id = 0x8015                  # A11 (t8015)
+board_id = 4
+fetch = ["KernelCache", "DeviceTree", "StaticTrustCache"]
 
-[ipsw.sha256]
-"044-76040-038.dmg" = "3f99b859c9728379110b66657c7b15285bcb1925ad8b5726542e2cdcf8b1028d"
-"044-76034-038.dmg" = "b4908cde41d23e6bc05e6af51a2c9eeb00cf0f863a6a18b1600c96a3fd70414f"
-
-# The raw image for the userdata partition: the OS and SystemOS disk images of the IPSW behind a manifest.
-# first_lba and last_lba are the GPT entry "userdata" of LUN 0, read from the tablet.
 [userdata]
 first_lba = 0x2f3840
 last_lba = 0x3d0abfa
@@ -34,14 +31,14 @@ windows = [
 ]
 
 [kernel]
-defconfig = "sheng_defconfig"
+defconfig = "fuxi_defconfig"
 
 [kernel.prelink]
 tool = "kits/NativePrelink/emit_prelink.py"
 kernel = "build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf"
 kernelcache_sha256 = "f18b4df865405f2a287b84977d7aca745e056d656d9fc9df1662970ce2969de7"
 slide = "-0x1000000"
-early_security_init = "com.apple.driver.AppleMobileFileIntegrity=0xfffffff005ab4ae0"
+early_security_init = "com.apple.driver.AppleMobileFileIntegrity=0xfffffff004e2e6c0"
 roots = [
   "com.apple.AppleFSCompression.AppleFSCompressionTypeZlib",
   "com.apple.driver.AppleARMPlatform",
@@ -77,7 +74,7 @@ roots = [
 ]
 
 [firmware]
-config = "fuxi"                   # 需要 uefi-sheng 里有 Resources/Configs/fuxi.toml in the Mu-Silicium checkout (--uefi)
+config = "fuxi"                   # Mu-Silicium 的 Resources/Configs/fuxi.toml
 dsc = "Platforms/Xiaomi/fuxiPkg/fuxi.dsc"
 fd = "Build/fuxiPkg/{target}_CLANGPDB/FV/SILICIUM_UEFI.fd"
 preflight = ["scripts/check-fuxi.py"]
@@ -143,30 +140,19 @@ kernel_args = [
   "offline-key-events=1",
   "native-ufs-root=1",
   "native-ufs-stats-delay=30",
-  "sheng-pmgr=2",
   "armcpu-diagnostics=1",
-  "sheng-disable-watchdogd=1",
-  "sheng-disable-jobs=com.apple.identityservicesd,com.apple.locationd,com.apple.CommCenter,com.apple.iconservices.iconservicesagent",
   "boot-ui-focus=PreBoard",
   "boot-ui-focus2=SpringBoard",
   "boot-ui-focus3=backboardd",
   "boot-ui-focus4=Setup",
-  "sheng-smp=1",
-  "sheng-cpufreq=3",
-  "sheng-touch=4",
-  "sheng-aks=1",
-  "sheng-gpu-power=9",
   "boot-diag-resume=0",
-  "sheng-gpu-metal=1",
-  "sheng-gpu-addon=1",
   "armcpu-spi-ipi=1",
   "-no_slto_panic",
   "ml-timeout-lock-panic-scale=40",
-  "sheng-touch-hid=1",
 ]
 
 [payload.adt]
-tool = "scripts/make-sheng-adt.py"
+tool = "scripts/make-fuxi-adt.py"
 chip_id = "207"
 owned_memory_size = "0x130000000"
 root_match_volume_uuid = "04769D26-2CA0-4825-B443-E2E5F88300F2"
