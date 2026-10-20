@@ -5,7 +5,7 @@ diff --git a/libkern/crypto/corecrypto_sha2.c b/libkern/crypto/corecrypto_sha2.c
  
  #if defined(CRYPTO_SHA2)
  
-+#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +/*
 + * SWEET has no corecrypto kext, so g_crypto_funcs stays NULL. SHA-256 uses
 + * XNU's built-in implementation directly, as the SWEET PRNG does; this also

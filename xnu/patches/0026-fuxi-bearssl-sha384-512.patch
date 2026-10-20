@@ -45,7 +45,7 @@
  	ccdigest_final(di, ctx->ctx, digest);
  }
  
-+#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +#include "sweet_bearssl/inc/bearssl_hash.h"
 +
 +_Static_assert(sizeof(br_sha384_context) <= sizeof(SHA512_CTX),
@@ -88,7 +88,7 @@
 +	br_sha512_out(BR_CTX(ctx), digest);
 +}
 +
-+#else /* !ARM64_BOARD_CONFIG_SWEET */
++#else /* !ARM64_BOARD_CONFIG_FUXI */
 +
  void
  SHA384_Init(SHA384_CTX *ctx)
@@ -97,7 +97,7 @@
  	ccdigest_final(di, ctx->ctx, digest);
  }
  
-+#endif /* !ARM64_BOARD_CONFIG_SWEET */
++#endif /* !ARM64_BOARD_CONFIG_FUXI */
 +
  #else
  
@@ -106,20 +106,20 @@
 +++ b/libkern/crypto/sweet_sha2big.c
 @@ -0,0 +1,4 @@
 +/* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
-+#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +#include "sweet_bearssl/src/hash/sha2big.c"
 +#endif
 --- /dev/null
 +++ b/libkern/crypto/sweet_dec64be.c
 @@ -0,0 +1,4 @@
 +/* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
-+#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +#include "sweet_bearssl/src/codec/dec64be.c"
 +#endif
 --- /dev/null
 +++ b/libkern/crypto/sweet_enc64be.c
 @@ -0,0 +1,4 @@
 +/* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
-+#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +#include "sweet_bearssl/src/codec/enc64be.c"
 +#endif

@@ -34,7 +34,7 @@
  	ctx->c.b64[0] = count;
  }
  
-+#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +/*
 + * SWEET has no corecrypto kext (g_crypto_funcs stays NULL). SHA-1 uses
 + * BearSSL's portable implementation (libkern/crypto/sweet_sha1.c), with
@@ -88,7 +88,7 @@
 +	br_sha1_out(&br_ctx, digest);
 +}
 +
-+#else /* !ARM64_BOARD_CONFIG_SWEET */
++#else /* !ARM64_BOARD_CONFIG_FUXI */
 +
  /* Copy a ccdigest ctx into a legacy SHA1 context */
  static void
@@ -97,7 +97,7 @@
  	ccdigest_final(di, di_ctx, digest);
  }
  
-+#endif /* !ARM64_BOARD_CONFIG_SWEET */
++#endif /* !ARM64_BOARD_CONFIG_FUXI */
 +
  /* This is not publicised in header, but exported in libkern.exports */
  void SHA1Final_r(SHA1_CTX *context, void *digest);
@@ -106,20 +106,20 @@
 +++ b/libkern/crypto/sweet_sha1.c
 @@ -0,0 +1,4 @@
 +/* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
-+#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +#include "sweet_bearssl/src/hash/sha1.c"
 +#endif
 --- /dev/null
 +++ b/libkern/crypto/sweet_dec32be.c
 @@ -0,0 +1,4 @@
 +/* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
-+#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +#include "sweet_bearssl/src/codec/dec32be.c"
 +#endif
 --- /dev/null
 +++ b/libkern/crypto/sweet_enc32be.c
 @@ -0,0 +1,4 @@
 +/* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
-+#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +#include "sweet_bearssl/src/codec/enc32be.c"
 +#endif

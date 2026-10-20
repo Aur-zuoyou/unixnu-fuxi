@@ -5,7 +5,7 @@ diff --git a/libkern/crypto/corecrypto_aes.c b/libkern/crypto/corecrypto_aes.c
  #include <corecrypto/ccaes.h>
  #include <kern/debug.h>
  
-+#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +/* SWEET has a built-in portable AES provider for the legacy CBC/ECB API. */
 +extern const struct ccmode_cbc sweet_aes_cbc_encrypt;
 +extern const struct ccmode_cbc sweet_aes_cbc_decrypt;
@@ -106,7 +106,7 @@ new file mode 100644
 + * No heap, SIMD or CPU crypto extension is needed. Contexts can be copied:
 + * their only pointer is the immutable BearSSL class descriptor.
 + */
-+#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +#include <libkern/libkern.h>
 +#include <libkern/crypto/aes.h>
 +#include <corecrypto/ccmode.h>
@@ -210,14 +210,14 @@ new file mode 100644
 +    .init = sweet_aes_decrypt_init,
 +    .cbc = sweet_aes_decrypt_cbc,
 +};
-+#endif /* ARM64_BOARD_CONFIG_SWEET */
++#endif /* ARM64_BOARD_CONFIG_FUXI */
 diff --git a/libkern/crypto/sweet_aes_ct.c b/libkern/crypto/sweet_aes_ct.c
 new file mode 100644
 --- /dev/null
 +++ b/libkern/crypto/sweet_aes_ct.c
 @@ -0,0 +1,4 @@
 +/* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
-+#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +#include "sweet_bearssl/src/symcipher/aes_ct.c"
 +#endif
 diff --git a/libkern/crypto/sweet_aes_ct_enc.c b/libkern/crypto/sweet_aes_ct_enc.c
@@ -226,7 +226,7 @@ new file mode 100644
 +++ b/libkern/crypto/sweet_aes_ct_enc.c
 @@ -0,0 +1,4 @@
 +/* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
-+#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +#include "sweet_bearssl/src/symcipher/aes_ct_enc.c"
 +#endif
 diff --git a/libkern/crypto/sweet_aes_ct_dec.c b/libkern/crypto/sweet_aes_ct_dec.c
@@ -235,7 +235,7 @@ new file mode 100644
 +++ b/libkern/crypto/sweet_aes_ct_dec.c
 @@ -0,0 +1,4 @@
 +/* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
-+#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +#include "sweet_bearssl/src/symcipher/aes_ct_dec.c"
 +#endif
 diff --git a/libkern/crypto/sweet_aes_ct_cbcenc.c b/libkern/crypto/sweet_aes_ct_cbcenc.c
@@ -244,7 +244,7 @@ new file mode 100644
 +++ b/libkern/crypto/sweet_aes_ct_cbcenc.c
 @@ -0,0 +1,4 @@
 +/* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
-+#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +#include "sweet_bearssl/src/symcipher/aes_ct_cbcenc.c"
 +#endif
 diff --git a/libkern/crypto/sweet_aes_ct_cbcdec.c b/libkern/crypto/sweet_aes_ct_cbcdec.c
@@ -253,6 +253,6 @@ new file mode 100644
 +++ b/libkern/crypto/sweet_aes_ct_cbcdec.c
 @@ -0,0 +1,4 @@
 +/* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
-+#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +#include "sweet_bearssl/src/symcipher/aes_ct_cbcdec.c"
 +#endif

@@ -37,7 +37,7 @@ diff --git a/libkern/crypto/corecrypto_md5.c b/libkern/crypto/corecrypto_md5.c
  }
  
  /* Copy a ccdigest ctx into a legacy MD5 context */
-+#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +/*
 + * SWEET has no corecrypto kext (g_crypto_funcs stays NULL). MD5 uses
 + * BearSSL's portable implementation (libkern/crypto/sweet_md5.c), with
@@ -91,7 +91,7 @@ diff --git a/libkern/crypto/corecrypto_md5.c b/libkern/crypto/corecrypto_md5.c
 +	br_md5_out(&br_ctx, digest);
 +}
 +
-+#else /* !ARM64_BOARD_CONFIG_SWEET */
++#else /* !ARM64_BOARD_CONFIG_FUXI */
 +
  static void
  DiToMD5(const struct ccdigest_info *di, struct ccdigest_ctx *di_ctx, MD5_CTX *md5_ctx)
@@ -101,14 +101,14 @@ diff --git a/libkern/crypto/corecrypto_md5.c b/libkern/crypto/corecrypto_md5.c
  	ccdigest_final(di, di_ctx, digest);
  }
 +
-+#endif /* !ARM64_BOARD_CONFIG_SWEET */
++#endif /* !ARM64_BOARD_CONFIG_FUXI */
 diff --git a/libkern/crypto/sweet_md5.c b/libkern/crypto/sweet_md5.c
 new file mode 100644
 --- /dev/null
 +++ b/libkern/crypto/sweet_md5.c
 @@ -0,0 +1,4 @@
 +/* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
-+#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +#include "sweet_bearssl/src/hash/md5.c"
 +#endif
 diff --git a/libkern/crypto/sweet_dec32le.c b/libkern/crypto/sweet_dec32le.c
@@ -117,7 +117,7 @@ new file mode 100644
 +++ b/libkern/crypto/sweet_dec32le.c
 @@ -0,0 +1,4 @@
 +/* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
-+#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +#include "sweet_bearssl/src/codec/dec32le.c"
 +#endif
 diff --git a/libkern/crypto/sweet_enc32le.c b/libkern/crypto/sweet_enc32le.c
@@ -126,6 +126,6 @@ new file mode 100644
 +++ b/libkern/crypto/sweet_enc32le.c
 @@ -0,0 +1,4 @@
 +/* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
-+#if defined(ARM64_BOARD_CONFIG_SWEET)
++#if defined(ARM64_BOARD_CONFIG_FUXI)
 +#include "sweet_bearssl/src/codec/enc32le.c"
 +#endif
