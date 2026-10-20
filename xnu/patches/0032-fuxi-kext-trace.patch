@@ -1,0 +1,75 @@
+diff --git a/libkern/c++/OSKext.cpp b/libkern/c++/OSKext.cpp
+index d14d5c1..73a99fa 100644
+--- a/libkern/c++/OSKext.cpp
++++ b/libkern/c++/OSKext.cpp
+@@ -10748,7 +10748,28 @@ OSKext::addKextsFromKextCollection(kernel_mach_header_t *mh,
+ 		 * explicitly removed.  Any creation/registration failures are
+ 		 * already logged for us.
+ 		 */
++#if defined(ARM64_BOARD_CONFIG_FUXI)
++		{
++			OSString *dbgIdent = OSDynamicCast(OSString,
++			    kextDict->getObject("CFBundleIdentifier"));
++			OSNumber *dbgLoad = OSDynamicCast(OSNumber,
++			    kextDict->getObject("_PrelinkExecutableLoadAddr"));
++			OSNumber *dbgSize = OSDynamicCast(OSNumber,
++			    kextDict->getObject("_PrelinkExecutableSize"));
++			OSNumber *dbgKmod = OSDynamicCast(OSNumber,
++			    kextDict->getObject("_PrelinkKmodInfo"));
++			kprintf("FUXI KEXT %d/%u: %s load=0x%llx size=%llu kmod=0x%llx\n", i,
++			    (unsigned)kextArray->getCount(),
++			    dbgIdent ? dbgIdent->getCStringNoCopy() : "(null)",
++			    dbgLoad ? dbgLoad->unsigned64BitValue() : 0ULL,
++			    dbgSize ? dbgSize->unsigned64BitValue() : 0ULL,
++			    dbgKmod ? dbgKmod->unsigned64BitValue() : 0ULL);
++		}
++#endif
+ 		withPrelinkedInfoDict(kextDict, (kaslrOffsets ? TRUE : FALSE), type);
++#if defined(ARM64_BOARD_CONFIG_FUXI)
++		kprintf("FUXI KEXT %d: done\n", i);
++#endif
+ 	}
+ 
+ 	/*
+diff --git a/libsa/bootstrap.cpp b/libsa/bootstrap.cpp
+index f0f770a..09b9822 100644
+--- a/libsa/bootstrap.cpp
++++ b/libsa/bootstrap.cpp
+@@ -202,6 +202,11 @@ KLDBootstrap::readStartupExtensions(void)
+ 	 * has handed us.
+ 	 */
+ 	prelinkInfoSect = getsectbynamefromheader(mh, kPrelinkInfoSegment, kPrelinkInfoSection);
++#if defined(ARM64_BOARD_CONFIG_FUXI)
++	kprintf("FUXI PRELINK: info section addr=0x%llx size=%llu\n",
++	    (unsigned long long)prelinkInfoSect->addr,
++	    (unsigned long long)prelinkInfoSect->size);
++#endif
+ 	if (prelinkInfoSect->size) {
+ 		readPrelinkedExtensions(mh, KCKindPrimary);
+ 	} else {
+@@ -246,7 +251,15 @@ KLDBootstrap::readPrelinkedExtensions(kernel_mach_header_t *mh, kc_kind_t type)
+ 	 * then iterate over each kext.
+ 	 */
+ 	infoPlistSection = getsectbynamefromheader(mh, kPrelinkInfoSegment, kPrelinkInfoSection);
++#if defined(ARM64_BOARD_CONFIG_FUXI)
++	kprintf("FUXI PRELINK: parsing XML at 0x%llx size=%llu\n",
++	    (unsigned long long)infoPlistSection->addr,
++	    (unsigned long long)infoPlistSection->size);
++#endif
+ 	parsedXML = OSUnserializeXML((const char *)infoPlistSection->addr, errorString);
++#if defined(ARM64_BOARD_CONFIG_FUXI)
++	kprintf("FUXI PRELINK: parsed=%d\n", parsedXML ? 1 : 0);
++#endif
+ 	if (parsedXML) {
+ 		infoDict = OSDynamicCast(OSDictionary, parsedXML.get());
+ 	}
+@@ -290,6 +303,9 @@ KLDBootstrap::readPrelinkedExtensions(kernel_mach_header_t *mh, kc_kind_t type)
+ 	 */
+ 	ret = OSKext::addKextsFromKextCollection(mh, infoDict,
+ 	    kPrelinkTextSegment, loaded_kcUUID, (mh->filetype == MH_FILESET) ? type : KCKindUnknown);
++#if defined(ARM64_BOARD_CONFIG_FUXI)
++	kprintf("FUXI PRELINK: addKextsFromKextCollection ret=%d\n", ret);
++#endif
+ 
+ 	if (!ret) {
+ 		OSKextLog(/* kext */ NULL, kOSKextLogErrorLevel | kOSKextLogArchiveFlag,

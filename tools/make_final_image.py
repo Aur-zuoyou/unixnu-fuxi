@@ -41,8 +41,14 @@ def main() -> int:
     off = find_payload_off(bytes(img))
     print(f"shim Image {len(img):,} 字节，payload 位于 0x{off:x}")
 
-    # 2) 用新内核生成 payload
-    r = subprocess.run(
+    # 2) 生成 payload（若已提供则直接用）
+    import os as _os
+    if _os.environ.get("USE_PAYLOAD"):
+        payload = io.open(_os.environ["USE_PAYLOAD"], "rb").read()
+        print(f"  使用现成 payload: {_os.environ['USE_PAYLOAD']} ({len(payload):,} 字节)")
+        r = None
+    else:
+        r = subprocess.run(
         [sys.executable, r"E:\ios-on-fuxi\tools\mkpayload_fuxi.py",
          KERNEL, ADT, OUT_PAYLOAD,
          "--cmdline", "debug=0xc serial=3 cpus=1 keepsyms=1 -v"],
@@ -51,10 +57,11 @@ def main() -> int:
     for line in (r.stdout or "").split("\n"):
         if line.strip():
             print("  " + line.strip())
-    if r.returncode != 0:
-        print(r.stderr[-800:])
-        return 1
-    payload = io.open(OUT_PAYLOAD, "rb").read()
+    if r is not None:
+        if r.returncode != 0:
+            print(r.stderr[-800:])
+            return 1
+        payload = io.open(OUT_PAYLOAD, "rb").read()
 
     # 3) 替换 payload 并修正 image_size
     out = bytearray(img[:off]) + payload

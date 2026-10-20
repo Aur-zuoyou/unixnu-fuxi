@@ -62,6 +62,14 @@ def patch_macho_segments(text_data: bytearray, updates: dict) -> int:
                 va, vsize = updates[name]
                 struct.pack_into("<Q", text_data, p + 24, va)
                 struct.pack_into("<Q", text_data, p + 32, vsize)
+                # 段内各 section 的 addr/size 也要跟着改：
+                # 内核判断"是否预链接"用的是 __PRELINK_INFO/__info 的 section size
+                nsects, = struct.unpack_from("<I", text_data, p + 64)
+                for si in range(nsects):
+                    sp = p + 72 + si * 80
+                    struct.pack_into("<Q", text_data, sp + 32, va)      # addr
+                    struct.pack_into("<Q", text_data, sp + 40, vsize)   # size
+                    struct.pack_into("<I", text_data, sp + 48, 0)       # offset
                 done += 1
         p += length
     return done
