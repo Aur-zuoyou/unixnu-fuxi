@@ -30,36 +30,29 @@ $CC $CFLAGS -static -T shim.ld -Wl,--build-id=none -Wl,--no-warn-rwx-segments -W
 
 $OBJCOPY -O binary "$OUT/shim.elf" "$OUT/Image"
 
-# 用 ELF 段表算镜像总大小（.bss/栈也要在 RAM 里存在）
-SIZE=$(python3 -c '
-import struct, sys
-data = open(sys.argv[1], "rb").read()
-shoff, = struct.unpack_from("<Q", data, 0x28)
-shentsize, shnum, shstrndx = struct.unpack_from("<HHH", data, 0x3A)
-best = 0
-for i in range(shnum):
-    off = shoff + i * shentsize
-    addr, foff, size = struct.unpack_from("<QQQ", data, off + 0x10)
-    end = addr + size
-    if end > best:
-        best = end
-print(best)
-' "$OUT/shim.elf")
+# 用链接脚本里的 _payload_start 决定 payload 起始偏移
+# （段表只覆盖真实 section，漏掉 . += 预留的栈空间）
+PAYLOAD_OFF=$(aarch64-linux-gnu-nm "$OUT/shim.elf" | awk '$3=="_payload_start"{print $1}')
+if [ -z "$PAYLOAD_OFF" ]; then
+  echo "错误：找不到 _payload_start 符号" >&2
+  exit 1
+fi
+PAYLOAD_OFF=$((16#$PAYLOAD_OFF))
+echo "  payload 起始偏移 = $PAYLOAD_OFF"
 
-echo "  Image 补齐到 $SIZE 字节（让 .bss/栈有实体空间）"
-truncate -s "$SIZE" "$OUT/Image"
+truncate -s "$PAYLOAD_OFF" "$OUT/Image"
 
-ls -l "$OUT/Image"
 if [ -n "${PAYLOAD_FILE:-}" ]; then
   echo "=== 内嵌 payload ==="
   cat "$PAYLOAD_FILE" >> "$OUT/Image"
 
-  # ARM64 Image 头里的 image_size（偏移 0x10）改成实际总大小：
-  # ABL 可能用它做校验/决定复制多少字节。
+  # ARM64 Image 头里的 image_size（偏移 0x10）改成实际总大小
   TOTAL=$(stat -c%s "$OUT/Image")
   printf '%08x' "$TOTAL" | sed 's/\(..\)\(..\)\(..\)\(..\)/\4\3\2\1/' | xxd -r -p | \
     dd of="$OUT/Image" bs=1 seek=16 conv=notrunc status=none
   echo "  image_size 字段 -> $TOTAL"
 fi
+
+ls -l "$OUT/Image"
 
 echo "=== shim 编译完成 ==="
