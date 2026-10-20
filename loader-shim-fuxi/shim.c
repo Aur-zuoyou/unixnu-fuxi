@@ -382,6 +382,8 @@ void shim_main(uint64_t dtb)
 	stage = "loader";
 	con_clear(RED);
 	con_str("SHIM", "fuxi bare-metal xnu loader");
+	con_hex("CurrentEL", rsr("CurrentEL") & 0xc);
+	con_hex("CNTFRQ", rsr("cntfrq_el0"));
 	con_skip();
 	/* payload 内嵌在镜像末尾：基址 + 链接期偏移 */
 	g_payload_ptr = (const void *)(g_image_base + (uintptr_t)_payload_start);
