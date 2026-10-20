@@ -161,15 +161,31 @@ jobs:
           export PYTHON_COMMAND=python3
           export EDK_TOOLS_PATH="$MU_BASE/BaseTools"
           export PATH="$EDK_TOOLS_PATH/BinWrappers/PosixLike:$EDK_TOOLS_PATH/Source/C/bin:$PATH"
-          export PACKAGES_PATH="$UES:$UES/Platforms/Xiaomi:$UNIXNU_ROOT/package:\
-          $UNIXNU_ROOT/drivers/DarwinBoot:$MU_BASE:$UES/Common/Mu:$UES/Common/Mu_OEM_Sample:\
-          $UES/Silicon/Qualcomm:$UES/Silicon/Silicium:$UES/Silicium-ACPI:\
-          $UES/Silicium-ACPI/Platforms/Xiaomi:$UES/Silicium-ACPI/Silicon/Qualcomm"
-
-          echo "PACKAGES_PATH=$PACKAGES_PATH"
-          for p in $UNIXNU_ROOT/package $UNIXNU_ROOT/drivers/DarwinBoot $MU_BASE; do
-            echo "check $p"; ls -d "$p" || { echo "缺少 $p"; exit 1; }
+          # 注意：必须单行 —— 用反斜杠续行时，缩进空格会被当成路径的一部分
+          PP=""
+          for d in \
+            "$UES" \
+            "$UES/Platforms/Xiaomi" \
+            "$UNIXNU_ROOT/package" \
+            "$UNIXNU_ROOT/drivers/DarwinBoot" \
+            "$MU_BASE" \
+            "$UES/Common/Mu" \
+            "$UES/Common/Mu_OEM_Sample" \
+            "$UES/Silicon/Qualcomm" \
+            "$UES/Silicon/Silicium" \
+            "$UES/Silicium-ACPI" \
+            "$UES/Silicium-ACPI/Platforms/Xiaomi" \
+            "$UES/Silicium-ACPI/Silicon/Qualcomm"
+          do
+            PP="${PP:+$PP:}$d"
           done
+          export PACKAGES_PATH="$PP"
+          echo "PACKAGES_PATH=$PACKAGES_PATH"
+          # 逐项确认 EDK2 能找到包（DarwinBootPkg 在 UniXNU/drivers/DarwinBoot 下）
+          for d in $UNIXNU_ROOT/package $UNIXNU_ROOT/drivers/DarwinBoot $MU_BASE; do
+            ls -d "$d" || { echo "缺少 $d"; exit 1; }
+          done
+          ls "$UNIXNU_ROOT/drivers/DarwinBoot/DarwinBootPkg/Driver/DarwinBoot.inf"
 
           cd "$UES"
           # 板级补丁（GIC spurious），仅编译期应用
