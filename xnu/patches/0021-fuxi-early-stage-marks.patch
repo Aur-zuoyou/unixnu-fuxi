@@ -1,16 +1,17 @@
 diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 --- a/osfmk/arm64/start.s
 +++ b/osfmk/arm64/start.s
-@@ -457,3 +457,19 @@
- LEXT(start_first_cpu)
+@@ -220,4 +220,20 @@
+ 	.align	3
+ 	.globl EXT(_start)
 +
-+	/* fuxi 决定性实验：画 64 行品红色块，然后停机。 */
-+	/* 看到色块 = 内核确实执行到了 start_first_cpu。 */
++	/* fuxi: 在 _start 第一条指令处画色块并停机。 */
++	/* 看到 = 内核代码从入口就开始执行了。 */
 +	MOV64	x9, 0xB0000000
-+	MOV64	x12, 0x4F1A00
++	MOV64	x12, 0x59A600
 +	add	x9, x9, x12
 +	MOV64	x10, 0x00FF00FF
-+	MOV64	x11, 69120
++	MOV64	x11, 51840
 +	1:
 +	str	w10, [x9], #4
 +		subs	x11, x11, #1
@@ -19,5 +20,5 @@ diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 +	2:
 +	wfi
 +	b	2b
- 
- 	// Unlock the core for debugging
+ LEXT(_start)
+ 	b	EXT(start_first_cpu)
