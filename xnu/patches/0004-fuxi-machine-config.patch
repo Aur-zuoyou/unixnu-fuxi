@@ -132,7 +132,7 @@ index e5336e5..f8d0d2e 100644
  #if (!CONFIG_KERNEL_INTEGRITY || (CONFIG_KERNEL_INTEGRITY && !defined(KERNEL_INTEGRITY_WT)))
  	/* Watchtower
 diff --git a/pexpert/arm/pe_fiq.c b/pexpert/arm/pe_fiq.c
-index 3ad743f..ad7bbd2 100644
+index 3ad743f..a3e1e97 100644
 --- a/pexpert/arm/pe_fiq.c
 +++ b/pexpert/arm/pe_fiq.c
 @@ -3,6 +3,7 @@
@@ -143,7 +143,7 @@ index 3ad743f..ad7bbd2 100644
  #include <arm64/proc_reg.h>
  #include <kern/clock.h>
  #include <mach/mach_time.h>
-@@ -16,6 +17,11 @@
+@@ -16,10 +17,18 @@
  #define GICR_WAKE_TIMEOUT_NS (1000000000ULL) // timeout for redistributor wakeup (default 1s)
  MACHINE_TIMEOUT(gicr_wake_timeout_ns, "gicr-wake-timeout", GICR_WAKE_TIMEOUT_NS, MACHINE_TIMEOUT_UNIT_NSEC, NULL);
  
@@ -155,37 +155,14 @@ index 3ad743f..ad7bbd2 100644
  static vm_offset_t gicd_base;
  static vm_offset_t gicr_base;
  static vm_offset_t gicr_size;
-@@ -44,12 +50,54 @@ _gic_write32(vm_offset_t addr, uint32_t value)
- #define gicr_write32(offset, data) (_gic_write32(gicr_pe_base + (offset), (data)))
- #define gicr_read64(offset) (_gic_read64(gicr_pe_base + (offset)))
  
-+#if defined(ARM64_BOARD_CONFIG_FUXI)
-+extern void fuxi_early_putc(char c);
++/* GICR 诊断值，供平台专家在控制台就绪后打印 */
++uint64_t fuxi_gic_dbg[6];
 +
-+static void
-+fuxi_early_puts(const char *s)
-+{
-+	while (*s) {
-+		fuxi_early_putc(*s++);
-+	}
-+}
-+
-+static void
-+fuxi_early_hex(uint64_t v)
-+{
-+	static const char digits[] = "0123456789abcdef";
-+
-+	fuxi_early_puts("0x");
-+	for (int i = 15; i >= 0; i--) {
-+		fuxi_early_putc(digits[(v >> (i * 4)) & 0xF]);
-+	}
-+	fuxi_early_putc('\n');
-+}
-+#endif
-+
- static vm_offset_t
- find_gicr_pe_base()
+ static uint32_t
+ _gic_read32(vm_offset_t addr)
  {
+@@ -50,6 +59,24 @@ find_gicr_pe_base()
  	// We only care about aff1 and aff0
  	uint32_t phys_id = __builtin_arm_rsr64("MPIDR_EL1") & (MPIDR_AFF1_MASK | MPIDR_AFF0_MASK);
  
@@ -210,7 +187,7 @@ index 3ad743f..ad7bbd2 100644
  	for (vm_offset_t offset = 0; offset < gicr_size; offset += GICR_PE_SIZE) {
  		vm_offset_t gicr_pe_base = gicr_base + offset;
  		uint64_t gicr_typer = gicr_read64(GICR_TYPER);
-@@ -96,6 +144,23 @@ pe_init_fiq()
+@@ -96,6 +123,23 @@ pe_init_fiq()
  			panic("%s: incorrect reg property size in GIC DT node; expecting 32 bytes but got %u bytes", __func__, prop_size);
  		}
  
@@ -234,29 +211,23 @@ index 3ad743f..ad7bbd2 100644
  		vm_offset_t soc_base_phys = pe_arm_get_soc_base_phys();
  
  		uint64_t const gicd_base_prop = ((uint64_t const *) prop)[0];
-@@ -123,6 +188,21 @@ pe_init_fiq()
+@@ -123,6 +167,15 @@ pe_init_fiq()
  	// Find the redistributor for this processor
  	vm_offset_t gicr_pe_base = find_gicr_pe_base();
  
 +#if defined(ARM64_BOARD_CONFIG_FUXI)
-+	fuxi_early_puts("GICD ");
-+	fuxi_early_hex((uint64_t)gicd_base);
-+	fuxi_early_puts("GICR ");
-+	fuxi_early_hex((uint64_t)gicr_base);
-+	fuxi_early_puts("SIZE ");
-+	fuxi_early_hex((uint64_t)gicr_size);
-+	fuxi_early_puts("PE   ");
-+	fuxi_early_hex((uint64_t)gicr_pe_base);
-+	fuxi_early_puts("IGROUPR0 ");
-+	fuxi_early_hex((uint64_t)GICR_IGROUPR0);
-+	fuxi_early_puts("WAKER ");
-+	fuxi_early_hex((uint64_t)GICR_WAKER);
++	fuxi_gic_dbg[0] = (uint64_t)gicd_base;
++	fuxi_gic_dbg[1] = (uint64_t)gicr_base;
++	fuxi_gic_dbg[2] = (uint64_t)gicr_size;
++	fuxi_gic_dbg[3] = (uint64_t)gicr_pe_base;
++	fuxi_gic_dbg[4] = (uint64_t)GICR_IGROUPR0;
++	fuxi_gic_dbg[5] = (uint64_t)GICR_WAKER;
 +#endif
 +
  	// Mark this PE to be awake
  	uint32_t gicr_waker = gicr_read32(GICR_WAKER);
  	if (gicr_waker & GICR_WAKER_CHILDRENASLEEP) {
-@@ -141,11 +221,31 @@ pe_init_fiq()
+@@ -141,11 +194,31 @@ pe_init_fiq()
  		}
  	}
  
@@ -288,7 +259,7 @@ index 3ad743f..ad7bbd2 100644
  
  	// Enable system register access
  	uint64_t icc_sre = __builtin_arm_rsr64("ICC_SRE_EL1");
-@@ -153,8 +253,12 @@ pe_init_fiq()
+@@ -153,8 +226,12 @@ pe_init_fiq()
  	__builtin_arm_wsr64("ICC_SRE_EL1", icc_sre);
  	__builtin_arm_isb(ISB_SY);
  
@@ -301,7 +272,7 @@ index 3ad743f..ad7bbd2 100644
  	__builtin_arm_wsr64("ICC_PMR_EL1", 0xFF);
  
  	// Set EOI mode of this processor
-@@ -162,12 +266,24 @@ pe_init_fiq()
+@@ -162,12 +239,24 @@ pe_init_fiq()
  	icc_ctlr &= ~ICC_CTLR_EOIMODE;
  	__builtin_arm_wsr64("ICC_CTLR_EL1", icc_ctlr);
  

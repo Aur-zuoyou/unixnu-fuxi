@@ -30,7 +30,7 @@ diff --git a/iokit/Kernel/arm/SweetPlatformExpert.cpp b/iokit/Kernel/arm/SweetPl
 new file mode 100644
 --- /dev/null
 +++ b/iokit/Kernel/arm/SweetPlatformExpert.cpp
-@@ -0,0 +1,86 @@
+@@ -0,0 +1,95 @@
 +/*
 + * Minimal device-tree platform expert for Redmi Note 10 Pro (fuxi).
 + * Uses XNU's normal platform, power-domain and nub initialization. Hardware
@@ -66,6 +66,15 @@ new file mode 100644
 +	}
 +	registerService();
 +	IOLog("FUXI: platform expert registered\n");
++
++#if defined(ARM64_BOARD_CONFIG_FUXI)
++	{
++		extern uint64_t fuxi_gic_dbg[6];
++		IOLog("FUXI GICR: gicd=%llx gicr=%llx size=%llx pe=%llx IGROUPR0=%llx WAKER=%llx\n",
++		    fuxi_gic_dbg[0], fuxi_gic_dbg[1], fuxi_gic_dbg[2],
++		    fuxi_gic_dbg[3], fuxi_gic_dbg[4], fuxi_gic_dbg[5]);
++	}
++#endif
 +	return true;
 +}
 +
