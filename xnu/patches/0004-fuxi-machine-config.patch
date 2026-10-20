@@ -265,7 +265,7 @@ index 0000000..a044ad0
 +
 +#define GIC_SPURIOUS_IRQ          1023    // IRQ no. for GIC spurious interrupt
 +
-+#define GICR_PE_SIZE              0x20000 // Size of each redistributor region
++#define GICR_PE_SIZE              0x40000 // fuxi(SM8550): 8 核 x 0x40000 = 0x200000（sweet 是 0x20000）
 +
 +/* GICv3 register definitions; see GICv3 spec (Arm IHI 0069G) */
 +#define GICD_CTLR                 0x0
