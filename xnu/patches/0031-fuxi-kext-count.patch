@@ -1,0 +1,35 @@
+diff --git a/libkern/c++/OSKext.cpp b/libkern/c++/OSKext.cpp
+index d14d5c1..1345e5c 100644
+--- a/libkern/c++/OSKext.cpp
++++ b/libkern/c++/OSKext.cpp
+@@ -10751,6 +10751,30 @@ OSKext::addKextsFromKextCollection(kernel_mach_header_t *mh,
+ 		withPrelinkedInfoDict(kextDict, (kaslrOffsets ? TRUE : FALSE), type);
+ 	}
+ 
++#if defined(ARM64_BOARD_CONFIG_FUXI)
++	{
++		int apfs = 0, sbd = 0;
++		for (int i = 0; i < (int)kextArray->getCount(); ++i) {
++			OSDictionary *d = OSDynamicCast(OSDictionary, kextArray->getObject(i));
++			if (!d) {
++				continue;
++			}
++			OSString *ident = OSDynamicCast(OSString, d->getObject("CFBundleIdentifier"));
++			if (!ident) {
++				continue;
++			}
++			if (!strcmp(ident->getCStringNoCopy(), "com.apple.filesystems.apfs")) {
++				apfs++;
++			}
++			if (!strcmp(ident->getCStringNoCopy(), "com.apple.security.sandbox")) {
++				sbd++;
++			}
++		}
++		kprintf("FUXI KEXT: %u prelinked entries (apfs=%d sandbox=%d)\n",
++		    kextArray->getCount(), apfs, sbd);
++	}
++#endif
++
+ 	/*
+ 	 * slide old-style kxld relocations
+ 	 * NOTE: this is still used on embedded KCs built with kcgen
