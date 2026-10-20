@@ -1,0 +1,89 @@
+name: build-uefi-sheng
+
+# 目标：验证 uefi-sheng (Mu-Silicium) 的构建链路能否在 CI 上跑通。
+#
+# 先只编 sheng（小米平板 6S Pro，SM8550，与我们的 fuxi 同 SoC）——
+# 这一步不改任何参数，纯粹确认工具链、submodule、依赖都没问题。
+# 通过之后再复制 shengPkg 改出 fuxiPkg。
+#
+# 产物：SILICIUM_UEFI.fd（UEFI 固件卷）
+
+concurrency:
+  group: uefi-sheng-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+    inputs:
+      device:
+        description: "要编译的设备（默认 sheng）"
+        required: false
+        default: "sheng"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    steps:
+      - name: 克隆 uefi-sheng（含 submodule）
+        run: |
+          set -x
+          git clone --recursive --depth 1 \
+            https://github.com/UniXNU/uefi-sheng.git uefi-sheng
+          cd uefi-sheng
+          git submodule update --init --recursive --depth 1
+          du -sh . || true
+          ls
+
+      - name: 安装依赖
+        run: |
+          set -x
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential uuid-dev iasl nasm python3 python3-pip \
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+      - name: pip 依赖
+        run: |
+          set -x
+          python3 -m pip install --upgrade pip
+          if [ -f uefi-sheng/pip-requirements.txt ]; then
+            python3 -m pip install -r uefi-sheng/pip-requirements.txt
+          else
+            python3 -m pip install coloredlogs
+          fi
+
+      - name: 环境准备脚本
+        run: |
+          set -x
+          cd uefi-sheng
+          if [ -f setup_env.sh ]; then
+            chmod +x setup_env.sh
+            ./setup_env.sh -p apt || echo "setup_env 返回非零，继续"
+          fi
+
+      - name: 编译 UEFI
+        run: |
+          set -x
+          cd uefi-sheng
+          DEVICE="${{ github.event.inputs.device || 'sheng' }}"
+          echo "编译设备: $DEVICE"
+          python3 build_uefi.py -d "$DEVICE" -r RELEASE -c 2>&1 | tee build.log
+          echo "---- 产物 ----"
+          find Build -name "*.fd" -o -name "*.fd" | head -20
+          ls -lR Build/*/*/FV 2>/dev/null || true
+
+      - name: 上传产物
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: uefi-sheng-fd
+          path: |
+            uefi-sheng/Build/**/*.fd
+            uefi-sheng/build.log
+          if-no-files-found: warn
+          retention-days: 14
