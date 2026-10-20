@@ -37,7 +37,16 @@ jobs:
     timeout-minutes: 120
 
     steps:
-      - name: 克隆 uefi-sheng（含 submodule）
+      # ── 缓存：把 ~5GB 的源码树整体缓存，第二次以后只做增量 ──
+      - name: 恢复源码树缓存
+        id: src-cache
+        uses: actions/cache@v4
+        with:
+          path: uefi-sheng
+          key: uefi-sheng-src-${{ hashFiles('.github/workflows/build-uefi-sheng.yml') }}
+
+      - name: 克隆 uefi-sheng（缓存未命中时）
+        if: steps.src-cache.outputs.cache-hit != 'true'
         run: |
           set -x
           # submodule 拉取偶发失败，重试三次
@@ -56,6 +65,25 @@ jobs:
             git submodule update --init --recursive
           du -sh .
           ls
+
+      - name: 缓存命中确认
+        if: steps.src-cache.outputs.cache-hit == 'true'
+        run: |
+          echo "源码树来自缓存，跳过克隆"
+          du -sh uefi-sheng
+          ls uefi-sheng | head
+
+      # ── 缓存：EDK2 的 BaseTools 与 Build 输出 ──
+      - name: 恢复构建输出缓存
+        id: build-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            uefi-sheng/Build
+            uefi-sheng/Conf
+          key: uefi-sheng-build-${{ hashFiles('.github/workflows/build-uefi-sheng.yml') }}-${{ github.run_id }}
+          restore-keys: |
+            uefi-sheng-build-${{ hashFiles('.github/workflows/build-uefi-sheng.yml') }}-
 
       - name: 安装依赖
         run: |
@@ -91,7 +119,15 @@ jobs:
           cd uefi-sheng
           DEVICE="${{ github.event.inputs.device || 'sheng' }}"
           echo "编译设备: $DEVICE"
-          python3 build_uefi.py -d "$DEVICE" -r RELEASE -c 2>&1 | tee build.log
+          # 有构建缓存时不加 -c，让 EDK2 做增量编译（快得多）
+          CLEAN_FLAG=""
+          if [ "${{ steps.build-cache.outputs.cache-hit }}" != "true" ]; then
+            CLEAN_FLAG="-c"
+            echo "无构建缓存，全量编译"
+          else
+            echo "有构建缓存，增量编译"
+          fi
+          python3 build_uefi.py -d "$DEVICE" -r RELEASE $CLEAN_FLAG 2>&1 | tee build.log
           echo "---- 产物 ----"
           find Build -name "*.fd" | head -20 || true
           ls -lR Build/*/*/FV 2>/dev/null || true
