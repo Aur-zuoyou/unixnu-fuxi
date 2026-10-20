@@ -75,7 +75,7 @@ diff --git a/libkern/conf/Makefile.template b/libkern/conf/Makefile.template
  CFLAGS+= -include meta_features.h -DLIBKERN_KERNEL_PRIVATE -DOSALLOCDEBUG=1
  SFLAGS+= -include meta_features.h
 +
-+ifeq ($(CURRENT_MACHINE_CONFIG),SWEET)
++ifeq ($(CURRENT_MACHINE_CONFIG),FUXI)
 +SWEET_AES_ROOT = $(SRCROOT)/libkern/crypto/sweet_bearssl
 +SWEET_AES_INC = -I$(SWEET_AES_ROOT)/inc -I$(SWEET_AES_ROOT)/src
 +sweet_aes.o_INCFLAGS = $(SWEET_AES_INC)
