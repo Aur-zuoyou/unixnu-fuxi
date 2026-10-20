@@ -246,13 +246,18 @@ const char *loader_boot(uintptr_t dtb)
 		con_hex("SCTLR", sctlr);
 	}
 	/*
-	 * XNU 用 TPIDR_EL1 当 "current per-cpu base"。ABL/Gunyah 会留下脏值
-	 * （实测 0xA76E3718，落在 payload 附近），内核早期读它就会拿到错误基址。
-	 * 清零后内核仍会在 cpu_data_startup_init 之前用到它，于是访问 0+0x220
-	 * 触发二级页表转换错误。
+	 * XNU 的 current_percpu_base() = current_thread()->machine.pcpu_data_base
+	 *   current_thread() 读 TPIDR_EL1（冷启动是 0 → NULL）
+	 *   NULL->machine.pcpu_data_base 就是访问 0x220 → 二级页表转换错误
+	 * ABL/Gunyah 留下的脏值（实测 0xA76E3718）同样是错的。
 	 *
-	 * 这里改成写入内核 __DATA 区里的一个已映射地址：即使内核提前使用，
-	 * 访问也会落在合法内存里，而不是 0 地址。XNU 之后会自己覆盖成真值。
+	 * 对策：在内核可写区域里造一个"假 thread"结构，让 0x220 偏移处
+	 * 落在一个合法的内核地址上，再把 TPIDR_EL1 指向它。
+	 * 内核之后自己设置 current_thread 时会覆盖这个值。
+	 *
+	 * thread_t 结构在 4K 页内核里 machine.pcpu_data_base 位于 +0x220
+	 * （见 osfmk/kern/thread.h: machine 子结构）。这里只保证：
+	 *   [base + 0x220] = 一个有效、可读写的内核地址
 	 */
 	{
 		uint64_t tpidr1, tpidr0;
@@ -263,14 +268,30 @@ const char *loader_boot(uintptr_t dtb)
 		con_hex("TPIDR_EL0", tpidr0);
 	}
 	{
-		/* 内核 __DATA 区：0xfffffe0007aac000 起，16K 对齐的一块留空给早期 percpu */
-		uint64_t base = 0xfffffe0007aac000ULL;
+		/*
+		 * 假 thread 放在 __BOOTDATA 段尾部（RW、内核必映射、且不会被 bss 清零，
+		 * 因为它在 filesize 之内）。__BOOTDATA: va=0xfffffe0007bd0000 size=0x4c000
+		 * 取最后 4K: 0xfffffe0007bd0000 + 0x4c000 - 0x1000 = 0xfffffe0007bfe000 附近
+		 */
+		uint64_t fake_thread_va = 0xfffffe0007bfe000ULL;
+		uint64_t fake_pcpu_va   = 0xfffffe0007bfd000ULL;	/* 紧邻的一块，给 pcpu_data_base 用 */
 
-		con_hex("TPIDR-NEW", base);
-		__asm__ volatile("msr tpidr_el1, %0" :: "r"(base) : "memory");
+		uintptr_t fake_pa = (uintptr_t)(fake_thread_va + pa_of_va_base);
+		uint64_t *slot = (uint64_t *)(fake_pa + 0x220);
+
+		con_hex("FAKE-THREAD", fake_thread_va);
+		con_hex("FAKE-THREAD-PA", fake_pa);
+		con_hex("FAKE-PCPU", fake_pcpu_va);
+
+		/* 清一块，确保里面不是垃圾 */
+		zero64(fake_pa, 0x1000);
+		*slot = fake_pcpu_va;		/* machine.pcpu_data_base */
+
+		__asm__ volatile("msr tpidr_el1, %0" :: "r"(fake_thread_va) : "memory");
 		__asm__ volatile("msr tpidr_el0, xzr" ::: "memory");
 		__asm__ volatile("msr tpidrro_el0, xzr" ::: "memory");
 		__asm__ volatile("isb" ::: "memory");
+		con_hex("TPIDR-NEW", fake_thread_va);
 	}
 
 	con_str("XNU", "jumping (fbcon clears screen)");
