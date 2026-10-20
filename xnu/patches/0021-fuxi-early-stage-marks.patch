@@ -1,35 +1,24 @@
 diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 --- a/osfmk/arm64/start.s
 +++ b/osfmk/arm64/start.s
-@@ -344,5 +344,16 @@
- 	// Convert lr to KVA
- 	add		lr, lr, x22
- 	sub		lr, lr, x23
-+	/* fuxi: 页表建完，即将进 common_start */
-+	MOV64	x9, 0xB0000000
-+	MOV64	x12, 0x41EB00
-+	add	x9, x9, x12
-+	MOV64	x10, 0x00FF00FF
-+	MOV64	x11, 17280
-+	1:
-+	str	w10, [x9], #4
-+		subs	x11, x11, #1
-+		b.ne	1b
-+	dsb	sy
- 
- 	b		common_start
-@@ -457,3 +457,14 @@
+@@ -457,4 +457,20 @@
  LEXT(start_first_cpu)
-+	/* fuxi: 进入 start_first_cpu */
-+	MOV64	x9, 0xB0000000
-+	MOV64	x12, 0x3B5380
-+	add	x9, x9, x12
-+	MOV64	x10, 0x0000FFFF
-+	MOV64	x11, 17280
-+	1:
-+	str	w10, [x9], #4
-+		subs	x11, x11, #1
-+		b.ne	1b
-+	dsb	sy
  
  	// Unlock the core for debugging
++
++	/* fuxi 决定性实验：画 64 行品红色块，然后停机。 */
++	/* 看到色块 = 内核确实执行到了 start_first_cpu。 */
++	MOV64	x9, 0xB0000000
++	MOV64	x12, 0x4F1A00
++	add	x9, x9, x12
++	MOV64	x10, 0x00FF00FF
++	MOV64	x11, 69120
++	1:
++	str	w10, [x9], #4
++		subs	x11, x11, #1
++		b.ne	1b
++	dsb	sy
++	2:
++	wfi
++	b	2b
+ 
