@@ -370,6 +370,10 @@ static uint32_t to_us(uint64_t ticks)
 	return ticks * 10 / 192;	/* 19.2 MHz */
 }
 
+uint64_t g_image_base;
+const void *g_payload_ptr;
+extern char _payload_start[];
+
 void shim_main(uint64_t dtb)
 {
 	struct mmu_info mi;
@@ -379,6 +383,10 @@ void shim_main(uint64_t dtb)
 	con_clear(RED);
 	con_str("SHIM", "fuxi bare-metal xnu loader");
 	con_skip();
+	/* payload 内嵌在镜像末尾：基址 + 链接期偏移 */
+	g_payload_ptr = (const void *)(g_image_base + (uintptr_t)_payload_start);
+	con_hex("SELF", g_image_base);
+	con_hex("PAYLOAD", (uint64_t)g_payload_ptr);
 	const char *why = loader_boot(dtb);
 	con_str("LOADER", why);
 	con_skip();

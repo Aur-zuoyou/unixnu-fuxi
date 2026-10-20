@@ -17,7 +17,7 @@ import sys
 
 PAGE = 2048
 KERNEL_ADDR = 0x10000000
-RAMDISK_ADDR = 0x20000000
+RAMDISK_ADDR = 0x10000000
 TAGS_ADDR = 0x10000000
 BOARD_NAME = b"fuxi"
 
@@ -30,13 +30,13 @@ def pad(data: bytes, page: int) -> bytes:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--kernel", required=True)
-    ap.add_argument("--ramdisk", required=True)
+    ap.add_argument("--ramdisk", default="")
     ap.add_argument("--output", required=True)
     ap.add_argument("--cmdline", default="console=null")
     a = ap.parse_args()
 
     kernel = open(a.kernel, "rb").read()
-    ramdisk = open(a.ramdisk, "rb").read()
+    ramdisk = open(a.ramdisk, "rb").read() if a.ramdisk else b"\0"
 
     cmdline = a.cmdline.encode() + b"\0"
     name = BOARD_NAME.ljust(16, b"\0")

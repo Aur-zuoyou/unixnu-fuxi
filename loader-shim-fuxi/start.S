@@ -21,6 +21,12 @@ _head:
 _start:
 	msr	daifset, #0xf
 	mov	x19, x0			/* DTB pointer from ABL */
+
+	/* 记录运行时镜像基址（我们可能被加载到任意地址） */
+	adr	x1, _head
+	adrp	x2, g_image_base
+	add	x2, x2, :lo12:g_image_base
+	str	x1, [x2]
 	msr	spsel, #1
 	adr	x1, _stack_top
 	mov	sp, x1

@@ -50,4 +50,9 @@ echo "  Image 补齐到 $SIZE 字节（让 .bss/栈有实体空间）"
 truncate -s "$SIZE" "$OUT/Image"
 
 ls -l "$OUT/Image"
+if [ -n "${PAYLOAD_FILE:-}" ]; then
+  echo "=== 内嵌 payload ==="
+  cat "$PAYLOAD_FILE" >> "$OUT/Image"
+fi
+
 echo "=== shim 编译完成 ==="
