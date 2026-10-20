@@ -299,6 +299,26 @@ const char *loader_boot(uintptr_t dtb)
 	}
 	__asm__ volatile("dsb sy; isb" ::: "memory");
 
+	/*
+	 * 跳转前的最后一步：在屏幕底部画一排可辨认的方块。
+	 * XNU 的 start.s 一进去就会重设 MMU/清屏，图案消失即证明内核真的开始执行；
+	 * 图案一直保留说明跳转根本没进去。
+	 */
+	{
+		volatile uint32_t *fb = (volatile uint32_t *)FB_BASE;
+		uint64_t line = (uint64_t)FB_W * 4;	/* 一行字节数 */
+		uint64_t y0 = FB_H - 24;
+
+		for (uint64_t y = y0; y < FB_H; y++) {
+			for (uint64_t x = 0; x < FB_W; x++) {
+				uint32_t c = ((x / 48) & 1) ? 0xffffffffu : 0xff00ffffu;
+
+				fb[(y * line) / 4 + x] = c;
+			}
+		}
+		con_str("XNU", "bar drawn; jumping now");
+	}
+
 	((xnu_entry_t)entry_pa)(ba_pa);
 	return "xnu returned";
 }
