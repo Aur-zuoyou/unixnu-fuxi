@@ -107,6 +107,11 @@ AsmXnuJump:
     b.ne    3b
     dsb     sy
 
+    // fuxi probe: do not jump yet, spin here to isolate the MMU-off write test
+5:
+    wfi
+    b       5b
+
     mov     x0, x4
     br      x3
 .size   AsmXnuJump, . - AsmXnuJump
