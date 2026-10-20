@@ -106,13 +106,22 @@ const char *loader_boot(uintptr_t dtb)
 	if (p->version != 1 || (p->adt_off & 7) || (src & 7))
 		return "bad payload header";
 
-	uint64_t pa_of_va_base = p->phys_base - p->virt_base;	/* pa = va + this */
-	con_hex2("PHYS", "base=", p->phys_base, "size=", p->mem_size);
+	/*
+	 * FUXI_LOW_PHYS：4GB 以上的地址在这台机器上访问会触发同步外部中止
+	 * （ESR 0x96000010 / FAR 0x101004000），所以内核放到低区。
+	 */
+	const uint64_t FUXI_LOW_PHYS = 0x90000000ULL;
+	const uint64_t FUXI_LOW_SIZE = 0x70000000ULL;
+	uint64_t phys_base = FUXI_LOW_PHYS;
+	uint64_t mem_size  = FUXI_LOW_SIZE;
+
+	uint64_t pa_of_va_base = phys_base - p->virt_base;	/* pa = va + this */
+	con_hex2("PHYS", "base=", phys_base, "size=", mem_size);
 	con_hex("VIRT", p->virt_base);
 	con_hex("ENTRY", p->entry_va);
 
 	/* 目标内核区域不能和 payload 自己重叠 */
-	if (src_end > p->phys_base && src < p->phys_base + p->mem_size)
+	if (src_end > phys_base && src < phys_base + mem_size)
 		return "payload overlaps kernel memory";
 
 	for (uint32_t i = 0; i < p->nsegs; i++) {
@@ -126,6 +135,18 @@ const char *loader_boot(uintptr_t dtb)
 
 	uintptr_t adt_pa = p->kernel_end + pa_of_va_base;
 	copy64(adt_pa, src + p->adt_off, p->adt_size);
+
+	/* ADT 里的 dram-base/dram-size 也要跟着改（XNU 用它建 physmap） */
+	{
+		volatile uint64_t *w = (volatile uint64_t *)adt_pa;
+		uint64_t n = p->adt_size / 8;
+		for (uint64_t i = 0; i < n; i++) {
+			if (w[i] == p->phys_base)
+				w[i] = phys_base;
+			else if (w[i] == p->mem_size)
+				w[i] = mem_size;
+		}
+	}
 	uintptr_t ba_pa = (adt_pa + p->adt_size + PAGE_16K - 1) & ~(PAGE_16K - 1);
 	uintptr_t top = ba_pa + PAGE_16K;
 
@@ -134,8 +155,8 @@ const char *loader_boot(uintptr_t dtb)
 	ba->Revision = 2;
 	ba->Version = 2;
 	ba->virtBase = p->virt_base;
-	ba->physBase = p->phys_base;
-	ba->memSize = p->mem_size;
+	ba->physBase = phys_base;
+	ba->memSize = mem_size;
 	ba->topOfKernelData = top;
 	ba->Video.v_baseAddr = FB_BASE;
 	ba->Video.v_display = 1;
@@ -147,7 +168,7 @@ const char *loader_boot(uintptr_t dtb)
 	ba->deviceTreeLength = (uint32_t)p->adt_size;
 	for (int i = 0; i < BOOT_LINE_LENGTH; i++)
 		ba->CommandLine[i] = p->cmdline[i];
-	ba->memSizeActual = p->mem_size;
+	ba->memSizeActual = mem_size;
 	con_hex2("BOOTARG", "pa=", ba_pa, "top=", top);
 
 	uintptr_t entry_pa = p->entry_va + pa_of_va_base;
