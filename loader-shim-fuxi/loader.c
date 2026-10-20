@@ -245,6 +245,25 @@ const char *loader_boot(uintptr_t dtb)
 		__asm__ volatile("mrs %0, sctlr_el1" : "=r"(sctlr));
 		con_hex("SCTLR", sctlr);
 	}
+	/*
+	 * XNU 用 TPIDR_EL1 当 "current per-cpu base"。ABL/Gunyah 会留下脏值，
+	 * 内核早期读它就会得到错误基址（_current_percpu_base 里访问 0+0x220
+	 * 触发二级页表转换错误）。冷启动时它是 0，这里显式清零以复现该状态。
+	 * XNU 的 start.s 之后会自己把这些寄存器设好。
+	 */
+	{
+		uint64_t tpidr1, tpidr0;
+
+		__asm__ volatile("mrs %0, tpidr_el1" : "=r"(tpidr1));
+		__asm__ volatile("mrs %0, tpidr_el0" : "=r"(tpidr0));
+		con_hex("TPIDR_EL1", tpidr1);
+		con_hex("TPIDR_EL0", tpidr0);
+	}
+	__asm__ volatile("msr tpidr_el1, xzr" ::: "memory");
+	__asm__ volatile("msr tpidr_el0, xzr" ::: "memory");
+	__asm__ volatile("msr tpidrro_el0, xzr" ::: "memory");
+	__asm__ volatile("isb" ::: "memory");
+
 	con_str("XNU", "jumping (fbcon clears screen)");
 
 	/*
