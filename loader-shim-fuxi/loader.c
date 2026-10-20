@@ -246,10 +246,13 @@ const char *loader_boot(uintptr_t dtb)
 		con_hex("SCTLR", sctlr);
 	}
 	/*
-	 * XNU 用 TPIDR_EL1 当 "current per-cpu base"。ABL/Gunyah 会留下脏值，
-	 * 内核早期读它就会得到错误基址（_current_percpu_base 里访问 0+0x220
-	 * 触发二级页表转换错误）。冷启动时它是 0，这里显式清零以复现该状态。
-	 * XNU 的 start.s 之后会自己把这些寄存器设好。
+	 * XNU 用 TPIDR_EL1 当 "current per-cpu base"。ABL/Gunyah 会留下脏值
+	 * （实测 0xA76E3718，落在 payload 附近），内核早期读它就会拿到错误基址。
+	 * 清零后内核仍会在 cpu_data_startup_init 之前用到它，于是访问 0+0x220
+	 * 触发二级页表转换错误。
+	 *
+	 * 这里改成写入内核 __DATA 区里的一个已映射地址：即使内核提前使用，
+	 * 访问也会落在合法内存里，而不是 0 地址。XNU 之后会自己覆盖成真值。
 	 */
 	{
 		uint64_t tpidr1, tpidr0;
@@ -259,10 +262,16 @@ const char *loader_boot(uintptr_t dtb)
 		con_hex("TPIDR_EL1", tpidr1);
 		con_hex("TPIDR_EL0", tpidr0);
 	}
-	__asm__ volatile("msr tpidr_el1, xzr" ::: "memory");
-	__asm__ volatile("msr tpidr_el0, xzr" ::: "memory");
-	__asm__ volatile("msr tpidrro_el0, xzr" ::: "memory");
-	__asm__ volatile("isb" ::: "memory");
+	{
+		/* 内核 __DATA 区：0xfffffe0007aac000 起，16K 对齐的一块留空给早期 percpu */
+		uint64_t base = 0xfffffe0007aac000ULL;
+
+		con_hex("TPIDR-NEW", base);
+		__asm__ volatile("msr tpidr_el1, %0" :: "r"(base) : "memory");
+		__asm__ volatile("msr tpidr_el0, xzr" ::: "memory");
+		__asm__ volatile("msr tpidrro_el0, xzr" ::: "memory");
+		__asm__ volatile("isb" ::: "memory");
+	}
 
 	con_str("XNU", "jumping (fbcon clears screen)");
 
