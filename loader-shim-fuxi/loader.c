@@ -111,7 +111,7 @@ const char *loader_boot(uintptr_t dtb)
 	 * （ESR 0x96000010 / FAR 0x101004000），所以内核放到低区。
 	 */
 	const uint64_t FUXI_LOW_PHYS = 0x90000000ULL;
-	const uint64_t FUXI_LOW_SIZE = 0x30000000ULL;   /* 到 0xC0000000，把帧缓冲 0xB8000000 包进 physmap */
+	const uint64_t FUXI_LOW_SIZE = 0x04000000ULL;   /* 只覆盖内核(约 35MB)，避开后面的基带/媒体保留区 */
 	uint64_t phys_base = FUXI_LOW_PHYS;
 	uint64_t mem_size  = FUXI_LOW_SIZE;
 
