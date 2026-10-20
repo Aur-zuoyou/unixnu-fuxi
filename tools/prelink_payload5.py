@@ -140,7 +140,11 @@ def main() -> int:
     # shim 才会把组件拷贝进去。
     knative = tolerant_macho(io.open(KERNEL, "rb").read())
     pre_placeholder = next(s for s in knative["segments"] if s["name"] == "__PRELINK_TEXT")["va"]
+    import os as _os
     region_lo = pre_placeholder
+    if _os.environ.get("COMPONENTS_TOP"):
+        # 把组件贴到 __TEXT 下方（保持 segLOWESTTEXT 仍是 __TEXT 附近的量级）
+        region_lo = text_va - 0x400000
     out_virt_base = region_lo & ~0x1FFFFFF        # 32MB 对齐
     print(f"   组件区从 0x{region_lo:x} 到 __TEXT 0x{text_va:x}（{(text_va - region_lo)/1048576:.1f} MB），virt_base 输出为 0x{out_virt_base:x}")
 
