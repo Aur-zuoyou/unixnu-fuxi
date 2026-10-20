@@ -387,6 +387,16 @@ void shim_main(uint64_t dtb)
 	g_payload_ptr = (const void *)(g_image_base + (uintptr_t)_payload_start);
 	con_hex("SELF", g_image_base);
 	con_hex("PAYLOAD", (uint64_t)g_payload_ptr);
+
+	/*
+	 * UFS 探测（只读）：ABL 刚用它加载过 boot.img，控制器应该还活着。
+	 * 放在跳转内核之前，这样结果能留在屏幕上。
+	 * 如果访问 UFS 寄存器会挂死，设备会自己复位回 fastboot —— 那本身也是信息。
+	 */
+	stage = "ufs";
+	test_ufs();
+	con_skip();
+
 	const char *why = loader_boot(dtb);
 	con_str("LOADER", why);
 	con_skip();
@@ -402,14 +412,6 @@ void shim_main(uint64_t dtb)
 			__asm__ volatile("wfi");
 		}
 	}
-
-	stage = "ufs";
-	test_ufs();
-	con_skip();
-	/* Keep the probe results on screen (later tests clear it); reset after 3 min. */
-	con_str("UFS", "probe done, reset in ~3 min");
-	delay_ms(180000);
-	reset(20);
 
 	stage = "fill off";
 	uint64_t fill_off = ticks_fill(RED);
