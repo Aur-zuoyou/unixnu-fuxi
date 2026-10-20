@@ -1,7 +1,11 @@
 #pragma once
 #include <stdint.h>
 
+#ifdef FUXI_QEMU
+#define FB_BASE		0xB0000000UL	/* QEMU virt 的 framebuffer */
+#else
 #define FB_BASE		0xB8000000UL	/* reserved-memory cont_splash_region */
+#endif
 #define FB_W		1080
 #define FB_H		2400
 #define FB_STRIDE	(FB_W * 4)	/* a8r8g8b8, matches mainline simplefb */
