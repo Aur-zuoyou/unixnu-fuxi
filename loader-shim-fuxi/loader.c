@@ -111,7 +111,7 @@ const char *loader_boot(uintptr_t dtb)
 	 * （ESR 0x96000010 / FAR 0x101004000），所以内核放到低区。
 	 */
 	const uint64_t FUXI_LOW_PHYS = 0x90000000ULL;
-	const uint64_t FUXI_LOW_SIZE = 0x17000000ULL;   /* 到 0xA7000000，避开 shim 自身(约 0xA8080000) */
+	const uint64_t FUXI_LOW_SIZE = 0x30000000ULL;   /* 到 0xC0000000，把帧缓冲 0xB8000000 包进 physmap */
 	uint64_t phys_base = FUXI_LOW_PHYS;
 	uint64_t mem_size  = FUXI_LOW_SIZE;
 
@@ -121,8 +121,6 @@ const char *loader_boot(uintptr_t dtb)
 	con_hex("ENTRY", p->entry_va);
 
 	/* 目标内核区域不能和 payload 自己重叠 */
-	if (src_end > phys_base && src < phys_base + mem_size)
-		return "payload overlaps kernel memory";
 
 	for (uint32_t i = 0; i < p->nsegs; i++) {
 		const struct payload_seg *s = &p->segs[i];
@@ -149,6 +147,10 @@ const char *loader_boot(uintptr_t dtb)
 	}
 	uintptr_t ba_pa = (adt_pa + p->adt_size + PAGE_16K - 1) & ~(PAGE_16K - 1);
 	uintptr_t top = ba_pa + PAGE_16K;
+
+	/* payload 必须落在内核写入区间之外（它会边拷边被读） */
+	if (src_end > phys_base && src < top)
+		return "payload overlaps kernel memory";
 
 	zero64(ba_pa, PAGE_16K);
 	volatile struct boot_args *ba = (volatile struct boot_args *)ba_pa;
