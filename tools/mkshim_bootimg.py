@@ -12,6 +12,7 @@ fuxi(小米13) 的 ABL 只认这套参数：
 """
 
 import argparse
+import hashlib
 import struct
 import sys
 
@@ -19,7 +20,8 @@ PAGE = 2048
 KERNEL_ADDR = 0x10000000
 RAMDISK_ADDR = 0x10000000
 TAGS_ADDR = 0x10000000
-BOARD_NAME = b"fuxi"
+OS_VERSION = 0x1A00016B   # 与 UEFI 镜像一致
+BOARD_NAME = b"\0" * 16   # 空名字（与 UEFI 镜像一致）
 
 
 def pad(data: bytes, page: int) -> bytes:
@@ -32,7 +34,7 @@ def main() -> int:
     ap.add_argument("--kernel", required=True)
     ap.add_argument("--ramdisk", default="")
     ap.add_argument("--output", required=True)
-    ap.add_argument("--cmdline", default="console=null")
+    ap.add_argument("--cmdline", default="")
     a = ap.parse_args()
 
     kernel = open(a.kernel, "rb").read()
@@ -40,6 +42,11 @@ def main() -> int:
 
     cmdline = a.cmdline.encode() + b"\0"
     name = BOARD_NAME.ljust(16, b"\0")
+
+    sha = hashlib.sha1()
+    sha.update(kernel)
+    sha.update(ramdisk)
+    ident = sha.digest() + b"\0" * (32 - 20)   # 32 字节，前 20 是 SHA1
 
     hdr = struct.pack(
         "<8s10I16s512s32s1024s",
@@ -49,14 +56,14 @@ def main() -> int:
         len(ramdisk),         # ramdisk_size
         RAMDISK_ADDR,         # ramdisk_addr
         0,                    # second_size
-        KERNEL_ADDR,          # second_addr
+        0,                    # second_addr（与 UEFI 镜像一致）
         TAGS_ADDR,            # tags_addr
         PAGE,                 # page_size
         1,                    # header_version（fuxi 用 v1）
-        0,                    # os_version
+        OS_VERSION,           # os_version
         name,
         cmdline.ljust(512, b"\0"),
-        b"\0" * 32,           # id
+        ident,                # id = SHA1(kernel+ramdisk)
         b"\0" * 1024,         # extra_cmdline
     )
     hdr = hdr.ljust(PAGE, b"\0")
