@@ -107,43 +107,29 @@ done:
 	if (best_bytes < need)
 		return 0;
 
-	/* 对齐并保留 virt_base 低位，让内核的块映射起点正好落在 base 上 */
+	/*
+	 * 在最大连续段里步进扫描，找到第一个不和自己重叠的位置。
+	 * payload 内嵌在 shim 镜像末尾，内核窗口必须完全避开它，
+	 * 否则拷贝过程会把仍在读取的源数据冲掉。
+	 */
 	{
-		uint64_t cand = (best_lo + BLOCK_SIZE - 1) & ~(BLOCK_SIZE - 1);
-		cand |= align_low & (BLOCK_SIZE - 1);
-		if (cand < best_lo)
-			cand += BLOCK_SIZE;
-		if (cand + need > best_hi) {
-			/* 顶端不够就往下退，但别退到段外 */
-			if (best_hi - need < best_lo)
-				return 0;
-			cand = (best_hi - need) & ~(BLOCK_SIZE - 1);
-			cand |= align_low & (BLOCK_SIZE - 1);
-			if (cand < best_lo)
-				cand = best_lo;
-		}
+		uint64_t lo = (best_lo + BLOCK_SIZE - 1) & ~(BLOCK_SIZE - 1);
+		uint64_t lowbits = align_low & (BLOCK_SIZE - 1);
 
-		/*
-		 * 必须避开我们自己：payload 内嵌在 shim 镜像末尾，内核窗口
-		 * 如果盖住它，拷贝过程会把仍在读取的源数据冲掉。
-		 * 优先往上让（内核窗口放在 payload 之上）。
-		 */
-		if (avoid_hi > avoid_lo &&
-		    cand < avoid_hi && cand + need > avoid_lo) {
-			uint64_t up = (avoid_hi + BLOCK_SIZE - 1) & ~(BLOCK_SIZE - 1);
-			up |= align_low & (BLOCK_SIZE - 1);
-			if (up + need <= best_hi) {
-				cand = up;
-			} else if (avoid_lo > best_lo && avoid_lo - best_lo >= need) {
-				/* 放不下就塞到 payload 之下 */
-				cand = (avoid_lo - need) & ~(BLOCK_SIZE - 1);
-				cand |= align_low & (BLOCK_SIZE - 1);
-			} else {
-				return 0;
-			}
+		lo |= lowbits;
+		if (lo < best_lo)
+			lo += BLOCK_SIZE;
+
+		for (uint64_t cand = lo; cand + need <= best_hi; cand += BLOCK_SIZE) {
+			int clash = avoid_hi > avoid_lo &&
+			    cand < avoid_hi && cand + need > avoid_lo;
+
+			if (clash)
+				continue;
+			*base = cand;
+			*size = need;	/* 只占实际需要的量，别把整段都圈进来 */
+			return 1;
 		}
-		*base = cand;
-		*size = best_hi - cand;
+		return 0;
 	}
-	return 1;
 }
