@@ -321,8 +321,8 @@ XnuBootRun (
    * 看到品红+JUMPING = 段拷贝/ADT/boot_args/清缓存全部走完，正准备跳。
    */
   {
-    volatile UINT32  *Fb = (volatile UINT32 *)(UINTN)fbBase;
-    UINTN             Pixels = (UINTN)fbPitch * (UINTN)fbH / 4;
+    volatile UINT32  *Fb = (volatile UINT32 *)FbBase;
+    UINTN             Pixels = (UINTN)FbPitch * (UINTN)FbHeight / 4;
     UINTN             k;
 
     for (k = 0; k < Pixels; k++) {
