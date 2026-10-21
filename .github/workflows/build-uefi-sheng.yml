@@ -227,7 +227,16 @@ jobs:
 
           DEVICE="${{ github.event.inputs.device || 'sheng' }}"
           echo "编译设备: $DEVICE"
-          build -p "Platforms/Xiaomi/${DEVICE}Pkg/${DEVICE}.dsc" \
+
+          # 编译前确认 DSC 存在（之前有几次 build 直接报 F001，看不出是路径问题）
+          DSC="Platforms/Xiaomi/${DEVICE}Pkg/${DEVICE}.dsc"
+          if [ ! -f "$DSC" ]; then
+            echo "找不到 $DSC"
+            ls Platforms/Xiaomi/ || true
+            exit 1
+          fi
+
+          build -p "$DSC" \
                 -a AARCH64 -b DEBUG -t CLANGPDB -n "$(nproc)" \
                 -D FD_BASE=0xA7100000 -D FD_SIZE=0x300000 -D FD_BLOCKS=768 \
                 -D ENABLE_SECUREBOOT=1 -D DEVICE_MODEL="$DEVICE" \
@@ -236,6 +245,11 @@ jobs:
 
           echo "---- 产物 ----"
           find Build -name "*.fd" | head -20
+          # 没有任何 .fd 说明链接或封装阶段失败，虽然 build 可能返回 0
+          if ! find Build -name "*.fd" | grep -q .; then
+            echo "没有生成 .fd，构建失败"
+            exit 1
+          fi
 
       - name: 上传产物
         if: always()
