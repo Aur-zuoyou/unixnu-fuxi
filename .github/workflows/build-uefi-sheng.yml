@@ -232,6 +232,14 @@ jobs:
           done
           export PACKAGES_PATH="$PP"
           echo "PACKAGES_PATH=$PACKAGES_PATH"
+          # EDK2 对 PACKAGES_PATH 里任何不存在的目录都直接报 000E，先自查一遍
+          IFS=':' read -ra DIRS <<< "$PACKAGES_PATH"
+          for d in "${DIRS[@]}"; do
+            if [ ! -d "$d" ]; then
+              echo "PACKAGES_PATH 里的目录不存在: $d"
+              exit 1
+            fi
+          done
           # 逐项确认 EDK2 能找到包（DarwinBootPkg 在 UniXNU/drivers/DarwinBoot 下）
           for d in $UNIXNU_ROOT/package $UNIXNU_ROOT/drivers/DarwinBoot $MU_BASE; do
             ls -d "$d" || { echo "缺少 $d"; exit 1; }
