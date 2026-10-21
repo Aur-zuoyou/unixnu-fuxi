@@ -261,7 +261,52 @@ const char *loader_boot(uintptr_t dtb)
 		con_hex("TPIDR_EL1-old", tpidr1);
 		con_hex("TPIDR_EL0-old", tpidr0);
 	}
-	__asm__ volatile("msr tpidr_el1, xzr" ::: "memory");
+
+	/*
+	 * 伪造一条最小的 thread -> cpu_data 链。
+	 *
+	 * XNU 在 arm_init 的 thread_bootstrap()（arm_init.c:442）之前就会调用
+	 * 一堆依赖 current_thread() 的函数：
+	 *   ml_get_timebase()      -> thread->machine.CpuDatap->cpu_base_timebase
+	 *   get_preemption_level() -> thread->machine.preemption_count
+	 *   current_percpu_base()  -> thread->machine.pcpu_data_base
+	 * current_thread() 读 TPIDR_EL1；iBoot 交棒前会把它设好，我们没有，
+	 * 于是一进去就解引用 NULL（FAR=0x228 / 0x230 / 0x220）。
+	 *
+	 * machine 子结构在 thread 里的偏移（osfmk/arm/thread.h）：
+	 *   +0x220  pcpu_data_base
+	 *   +0x228  CpuDatap
+	 *   +0x230  preemption_count
+	 * 全 0 的 cpu_data 对早期启动足够（只会读 cpu_base_timebase 等字段）。
+	 */
+	{
+		/* 两块 16K 对齐的物理页：thread 和 cpu_data */
+		const uint64_t FAKE_THREAD_OFF = 0x3C00000ULL;	/* 相对 phys_base 60MB 处 */
+		const uint64_t FAKE_CPUDATA_OFF = 0x3C10000ULL;
+		uintptr_t thread_pa  = (uintptr_t)(phys_base + FAKE_THREAD_OFF);
+		uintptr_t cpudata_pa = (uintptr_t)(phys_base + FAKE_CPUDATA_OFF);
+		uint64_t thread_va  = p->virt_base + FAKE_THREAD_OFF;
+		uint64_t cpudata_va = p->virt_base + FAKE_CPUDATA_OFF;
+
+		con_hex("FAKE-THREAD-VA", thread_va);
+		con_hex("FAKE-THREAD-PA", thread_pa);
+		con_hex("FAKE-CPUDATA-VA", cpudata_va);
+
+		zero64(thread_pa, PAGE_16K);
+		zero64(cpudata_pa, PAGE_16K);
+
+		/* thread->machine.pcpu_data_base = 0（XNU 自己也是 0） */
+		*(volatile uint64_t *)(thread_pa + 0x220) = 0;
+		/* thread->machine.CpuDatap = fake cpu_data */
+		*(volatile uint64_t *)(thread_pa + 0x228) = cpudata_va;
+		/* thread->machine.preemption_count = 0（zero64 已经填 0） */
+
+		con_hex("THREAD+0x228", *(volatile uint64_t *)(thread_pa + 0x228));
+
+		/* 最后再把 TPIDR_EL1 指向伪造的 thread */
+		__asm__ volatile("msr tpidr_el1, %0" :: "r"(thread_va) : "memory");
+	}
+
 	__asm__ volatile("msr tpidr_el0, xzr" ::: "memory");
 	__asm__ volatile("msr tpidrro_el0, xzr" ::: "memory");
 	__asm__ volatile("isb" ::: "memory");
