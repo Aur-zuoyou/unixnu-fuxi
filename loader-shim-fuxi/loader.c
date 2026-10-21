@@ -146,7 +146,18 @@ const char *loader_boot(uintptr_t dtb)
 		if (shim_pick_window(dtb, need, p->virt_base, avoid_lo, avoid_hi,
 		    &pick_base, &pick_size)) {
 			phys_base = pick_base;
-			mem_size = pick_size;
+			/*
+			 * memSize 决定内核 physmap 的跨度，也决定 VM 区（zone/kext/slab）
+			 * 从哪里开始：arm_vm_init.c:1879 static_memory_end = physmap_base + mem_size。
+			 * 只传窗口大小（实测 63MB）会让 VM 区远不够用，内核进去就死。
+			 * 这里改成“从 phys_base 到 4GB 边界”，与真机 DRAM 的可用范围一致
+			 * （Gunyah 只映射低 4GB）。
+			 */
+			{
+				uint64_t to_4g = 0x100000000ULL - phys_base;
+
+				mem_size = (pick_size > to_4g) ? pick_size : to_4g;
+			}
 			con_hex2("MEMWIN", "dyn base=", phys_base, "size=", mem_size);
 		} else {
 			con_hex2("MEMWIN", "fallback base=", phys_base, "size=", mem_size);
