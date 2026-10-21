@@ -43,6 +43,16 @@ jobs:
     timeout-minutes: 120
 
     steps:
+      # 必须先 checkout：vendor/ 里的两个 tarball（UniXNU、uefi-sheng）是本仓库
+      # 自带的完整源码，上游 zip 里缺 DarwinBoot.inf 和 shengPkg。没有这一步
+      # CI 里连 repo 都没有，"vendor/UniXNU.tar.gz: No such file" 就是这个原因。
+      - name: 取本仓库（vendor/ 里的源码包在这里）
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            vendor
+          sparse-checkout-cone-mode: false
+
       # ── 缓存整棵源码树（约 5GB），命中后跳过所有克隆 ──
       - name: 恢复源码缓存
         id: cache
