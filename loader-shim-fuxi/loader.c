@@ -136,32 +136,14 @@ const char *loader_boot(uintptr_t dtb)
 	{
 		uint64_t need = (p->kernel_end - p->virt_base) + p->adt_size + 3 * PAGE_16K;
 		uint64_t pick_base = 0, pick_size = 0;
-		/*
-		 * payload 内嵌在 shim 镜像末尾：从 src 一直到 src + adt_off + adt_size
-		 * 都还会被读，窗口必须避开这段，否则边拷边覆盖。
-		 */
 		uint64_t avoid_lo = src;
 		uint64_t avoid_hi = src + p->adt_off + p->adt_size;
 
 		if (shim_pick_window(dtb, need, p->virt_base, avoid_lo, avoid_hi,
 		    &pick_base, &pick_size)) {
 			phys_base = pick_base;
-			/*
-			 * memSize 决定内核 physmap 的跨度，也决定 VM 区（zone/kext/slab）
-			 * 从哪里开始：arm_vm_init.c:1879 static_memory_end = physmap_base + mem_size。
-			 * 只传窗口大小（实测 63MB）会让 VM 区远不够用，内核进去就死。
-			 * 这里改成“从 phys_base 到 4GB 边界”，与真机 DRAM 的可用范围一致
-			 * （Gunyah 只映射低 4GB）。
-			 */
 			{
-				/*
-				 * 真机 4GB 以上访问会触发外部中止（Gunyah stage-2 只映射低 4GB）。
-				 * 内核建 physmap 时会按 memSize 把 [gPhysBase, gPhysBase+memSize)
-				 * 映射进去，若正好顶到 0x100000000，多出的一页就跨进禁区。
-				 * 这里留 2MB 余量，落点 0xFE000000。
-				 */
 				uint64_t to_4g = 0x100000000ULL - phys_base - 0x200000ULL;
-
 				mem_size = (pick_size > to_4g) ? pick_size : to_4g;
 			}
 			con_hex2("MEMWIN", "dyn base=", phys_base, "size=", mem_size);

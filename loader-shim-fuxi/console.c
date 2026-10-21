@@ -80,6 +80,31 @@ void con_hex(const char *label, uint64_t v)
 	con_str(label, buf);
 }
 
+/* 逐字节打印（可打印 ASCII 原样、换行换行、其余画 .），用于 dump panic 日志 */
+void con_bytes(const char *label, const volatile uint8_t *buf, int len)
+{
+	put_str(0, label, YELLOW);
+	int col = LABEL_COLS;
+	for (int i = 0; i < len; i++) {
+		uint8_t c = buf[i];
+		if (c == 0)
+			break;
+		if (c == '\n') {
+			row++;
+			col = LABEL_COLS;
+			if (row > 60)
+				break;
+		} else {
+			put_char(col++, (c >= 0x20 && c < 0x7f) ? (char)c : '.', WHITE);
+			if (col >= FB_W / CH_W) {
+				row++;
+				col = LABEL_COLS;
+			}
+		}
+	}
+	row++;
+}
+
 void con_hex2(const char *label, const char *a, uint32_t va, const char *b, uint32_t vb)
 {
 	char buf[9];
