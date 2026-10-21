@@ -154,7 +154,13 @@ const char *loader_boot(uintptr_t dtb)
 			 * （Gunyah 只映射低 4GB）。
 			 */
 			{
-				uint64_t to_4g = 0x100000000ULL - phys_base;
+				/*
+				 * 真机 4GB 以上访问会触发外部中止（Gunyah stage-2 只映射低 4GB）。
+				 * 内核建 physmap 时会按 memSize 把 [gPhysBase, gPhysBase+memSize)
+				 * 映射进去，若正好顶到 0x100000000，多出的一页就跨进禁区。
+				 * 这里留 2MB 余量，落点 0xFE000000。
+				 */
+				uint64_t to_4g = 0x100000000ULL - phys_base - 0x200000ULL;
 
 				mem_size = (pick_size > to_4g) ? pick_size : to_4g;
 			}
