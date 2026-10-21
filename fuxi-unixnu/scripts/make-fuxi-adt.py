@@ -35,6 +35,8 @@ GIC_DIST_SIZE = 0x10000
 GIC_REDIST = 0x17180000
 GIC_REDIST_SIZE = 0x200000
 TIMEBASE = 19200000
+# panic 日志区：512 KB，放在 DRAM 窗口尾部（见 main 里的 --panic-region）
+PANIC_LOG_SIZE = 0x80000
 UFS_HC = 0x1d84000
 UFS_HC_SIZE = 0x3000
 UFS_PHY = 0x1d80000
@@ -97,6 +99,8 @@ def main():
     parser.add_argument('--data-ramdisk', action='store_true',
                         help='/chosen/memory-map RAMDisk placeholder; the loader fills in the real range for a scratch Data seed')
     parser.add_argument('--trust-cache', action='store_true', help='Zeroed TrustCache sidecar handoff placeholder')
+    parser.add_argument('--panic-region', type=lambda value: int(value, 0), default=0,
+                        help='panic log 区物理地址（512KB，需在 DRAM 窗口内且不与内核重叠）')
     args = parser.parse_args()
     if (args.unique_chip_id is None) != (args.chip_id is None):
         parser.error('--unique-chip-id and --chip-id must be supplied together')
@@ -130,6 +134,11 @@ def main():
         ('#size-cells', struct.pack('<I', 2)),
     ], [
         node('chosen', [('random-seed', os.urandom(64)),
+                        # XNU 的 pe_init.c:check_for_panic_log() 需要这一项 +
+                        # /pram 的 reg 才能算出 gPanicBase。缺了它
+                        # debug_log_init 会报 'gPanicBase is still not initialized'，
+                        # panic 时无处写日志（debug_buf_base 落在 NULL 附近）。
+                        ('embedded-panic-log-size', struct.pack('<I', PANIC_LOG_SIZE)),
                         # Without these XNU never publishes IOPlatformUUID and gethostuuid() blocks forever
                         # for callers (configd) that pass a zero timeout.
                         *([('unique-chip-id', struct.pack('<Q', args.unique_chip_id)), ('chip-id', struct.pack('<I', args.chip_id))]
@@ -164,6 +173,12 @@ def main():
                                  ([('TrustCache', bytes(16))] if args.trust_cache else [])),
               # Read by the original AppleImage4 at start-up; present and empty here.
               node('manifest-properties')]),
+        # XNU 的 pe_init.c:check_for_panic_log() 读 /pram 的 reg[0]（物理地址）
+        # 和 /chosen 的 embedded-panic-log-size（可写大小），两者齐备才设
+        # gPanicBase。缺了它 debug_log_init 会报 gPanicBase 未初始化，
+        # panic 日志无处可写（debug_buf_base 落在 NULL 附近）。
+        node('pram',
+             [('reg', struct.pack('<QQ', args.panic_region, PANIC_LOG_SIZE))]),
         node('cpus', children=cpus),
         *([node('psci', [('compatible', b'arm,psci-1.0\0'), ('method', args.psci_method.encode() + b'\0')])] if len(cpus) > 1 else []),
         # Suspend/resume is not implemented for this board. Use the original
