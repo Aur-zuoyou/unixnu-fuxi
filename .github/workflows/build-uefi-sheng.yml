@@ -118,7 +118,9 @@ jobs:
           # Common/Mu 等 submodule 不在 vendor 包里，从公开仓库补齐
           for spec in \
             "Common/Mu|https://github.com/microsoft/mu_plus/archive/refs/heads/release/202608.zip" \
-            "Common/Mu_OEM_Sample|https://github.com/microsoft/mu_oem_sample/archive/refs/heads/release/202608.zip"
+            "Common/Mu_OEM_Sample|https://github.com/microsoft/mu_oem_sample/archive/refs/heads/release/202608.zip" \
+            "Silicium-ACPI|https://github.com/Project-Silicium/Silicium-ACPI/archive/refs/heads/main.zip" \
+            "Binaries|https://github.com/Project-Silicium/Device-Binaries/archive/refs/heads/main.zip"
           do
             dst="uefi-sheng/${spec%%|*}"
             url="${spec##*|}"
@@ -132,6 +134,15 @@ jobs:
             rm -rf _sub
             echo "$dst 补齐: $(ls "$dst" | head -3 | tr '\n' ' ')"
           done
+
+          # openssl 是按 commit 钉死的 submodule：只是 Silicon/Silicium 里
+          # OpensslLib 的依赖，静态库已经从发布包自带，一般不参与编译。
+          # 但 PACKAGES_PATH 一旦指向不存在的目录 build 会直接报 000E，
+          # 所以这里至少让它存在（有 .dec 就行）。
+          if [ ! -d uefi-sheng/Silicon/Silicium/OpensslPkg/Library/OpensslLib/openssl ]; then
+            mkdir -p uefi-sheng/Silicon/Silicium/OpensslPkg/Library/OpensslLib/openssl
+            echo "openssl submodule 占位目录已创建"
+          fi
 
           du -sh UniXNU UniXNU-sheng uefi-sheng UniXNU/package/Mu_Basecore
 
