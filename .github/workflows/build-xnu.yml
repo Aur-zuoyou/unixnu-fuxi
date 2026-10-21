@@ -23,7 +23,7 @@ on:
         default: "DEVELOPMENT"
       machine_config:
         description: "xnu MACHINE_CONFIG"
-        default: "FUXI"
+        default: "BCM2837"
 
 concurrency:
   group: xnu-${{ github.ref }}
@@ -34,7 +34,7 @@ env:
   DXB_SHA: 663906528d1cd5ea8fde7de6f16de73db9511549
   MACOS_VERSION: "13.5"
   KERNEL_CONFIG: ${{ inputs.kernel_config || 'DEVELOPMENT' }}
-  MACHINE_CONFIG: ${{ inputs.machine_config || 'FUXI' }}
+  MACHINE_CONFIG: ${{ inputs.machine_config || 'BCM2837' }}
 
 jobs:
   build:
