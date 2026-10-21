@@ -120,6 +120,30 @@ def main() -> int:
         q.cmd("pmemsave", val=fb, size=fb_bytes, filename=os.path.join(out, "fb.raw"))
         raw = open(os.path.join(out, "fb.raw"), "rb").read()
         qf.save_png(os.path.join(out, "fb.png"), raw, qf.FB_W, qf.FB_H)
+        # 读 panic 相关的全局变量（phys 0x42000000，virt 0xfffffe0006000000）
+        PHYS = 0x42000000
+        VIRT = 0xfffffe0006000000
+        def va2pa(va): return PHYS + (va - VIRT)
+        for name, va in (("panicstr", 0xfffffe0007aef4d8),
+                         ("panicbuf", 0xfffffe0007aef508)):
+            try:
+                fout = os.path.join(out, name + ".bin")
+                q.cmd("pmemsave", val=va2pa(va), size=512, filename=fout)
+                d = open(fout, "rb").read()
+                txt = d.split(b"\x00")[0]
+                if txt and all(32 <= c < 127 or c in (9,10,13) for c in txt):
+                    print("  %s: %s" % (name, txt.decode("latin1")[:200]))
+                else:
+                    import struct as _s
+                    ptr, = _s.unpack_from("<Q", d, 0)
+                    print("  %s: ptr=0x%x" % (name, ptr))
+                    if VIRT <= ptr < VIRT + 0x10000000:
+                        q.cmd("pmemsave", val=va2pa(ptr), size=256, filename=fout)
+                        d2 = open(fout, "rb").read()
+                        t2 = d2.split(b"\x00")[0]
+                        if t2: print("      -> %s" % t2.decode("latin1")[:200])
+            except Exception as e:
+                print("  %s: %s" % (name, e))
         print(f"  截屏: {out}\\fb.png")
     except Exception as e:
         print("  采样失败:", e)

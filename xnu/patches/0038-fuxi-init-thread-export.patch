@@ -1,0 +1,57 @@
+diff --git a/osfmk/arm/arm_init.c b/osfmk/arm/arm_init.c
+index 1f0543c..314c6ce 100644
+--- a/osfmk/arm/arm_init.c
++++ b/osfmk/arm/arm_init.c
+@@ -354,6 +354,28 @@ arm_init(
+ 	BootArgs = args = &const_boot_args;
+ 
+ 	cpu_data_init(&BootCpuData);
++#if defined(ARM64_BOARD_CONFIG_FUXI)
++	/*
++	 * start.s 进入 arm_init 前执行过 msr TPIDR_EL1, xzr，
++	 * 紧接着的 PE_init_platform() 会加锁 -> get_preemption_level()
++	 * -> current_thread() -> 读 [TPIDR + 0x230]，TPIDR 为 0 时崩。
++	 * ml_get_timebase()（读 +0x228）同理。
++	 *
++	 * 这里只把 TPIDR_EL1 指向静态的 init_thread 并填好 machine 的
++	 * 三个早期字段；不调用 thread_bootstrap()（它要 timer_init）。
++	 * 下面原本的 thread_bootstrap() 之后会用真值覆盖。
++	 */
++	{
++		extern thread_t fuxi_init_thread(void);
++		thread_t early_thread = fuxi_init_thread();
++
++		early_thread->machine.CpuDatap = &BootCpuData;
++		early_thread->machine.pcpu_data_base = (vm_offset_t)0;
++		early_thread->machine.preemption_count = 0;
++		machine_set_current_thread(early_thread);
++		kprintf("FUXI INIT: early thread=%p\n", (void *)early_thread);
++	}
++#endif
+ #if defined(HAS_APPLE_PAC)
+ 	/* bootstrap cpu process dependent key for kernel has been loaded by start.s */
+ 	BootCpuData.rop_key = ml_default_rop_pid();
+diff --git a/osfmk/kern/thread.c b/osfmk/kern/thread.c
+index 384ef23..df21971 100644
+--- a/osfmk/kern/thread.c
++++ b/osfmk/kern/thread.c
+@@ -390,6 +390,19 @@ thread_ro_update_flags(thread_ro_t tro, thread_ro_flags_t add, thread_ro_flags_t
+ }
+ #endif
+ 
++#if defined(ARM64_BOARD_CONFIG_FUXI)
++/*
++ * arm_init 需要在 PE_init_platform() 之前就设好 TPIDR_EL1，
++ * 但那时不能调 thread_bootstrap()（它会调 timer_init）。
++ * 这里只把静态的 init_thread 交出去，让调用方自己填 machine 字段。
++ */
++thread_t
++fuxi_init_thread(void)
++{
++	return &init_thread;
++}
++#endif
++
+ __startup_func
+ thread_t
+ thread_bootstrap(void)

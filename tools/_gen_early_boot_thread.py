@@ -64,13 +64,22 @@ insert = """	cpu_data_init(&BootCpuData);
 	 * 保持行为一致。
 	 */
 	{
-		thread_t early_thread = thread_bootstrap();
+		/*
+		 * 只设置 TPIDR_EL1，不调用 thread_bootstrap()。
+		 * thread_bootstrap() 里会调 timer_init()，而 arm_init 这个位置
+		 * timer 子系统还没起来，会引入新的崩溃。
+		 * init_thread 是 thread.c 里的静态结构，已经随 BSS 清零，
+		 * 这里直接把 TPIDR 指向它并补上 machine 的关键字段，
+		 * 等下面原本的 thread_bootstrap() 跑完会用真值覆盖。
+		 */
+		extern thread_t fuxi_init_thread(void);
+		thread_t early_thread = fuxi_init_thread();
 
 		early_thread->machine.CpuDatap = &BootCpuData;
 		early_thread->machine.pcpu_data_base = (vm_offset_t)0;
-		machine_set_current_thread(early_thread);
 		early_thread->machine.preemption_count = 0;
-		kprintf("FUXI INIT: early boot thread=%p TPIDR_EL1 set\\n",
+		machine_set_current_thread(early_thread);
+		kprintf("FUXI INIT: early thread=%p (no thread_bootstrap)\\n",
 		    (void *)early_thread);
 	}
 #endif
