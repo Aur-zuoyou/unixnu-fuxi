@@ -24,7 +24,7 @@ index 8460893..9a748ea 100644
  export ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG := $(shell echo $(CURRENT_ARCH_CONFIG) | tr A-Z a-z)
  ifneq ($(filter arm64,$(ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG)),)
 +# fuxi's Cortex-A76/A55 have no pointer authentication: stay plain arm64
-+ifneq ($(CURRENT_MACHINE_CONFIG),FUXI)
++ifneq ($(filter FUXI BCM2837,$(CURRENT_MACHINE_CONFIG)),)
  export ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG := arm64e
  endif
 +endif
