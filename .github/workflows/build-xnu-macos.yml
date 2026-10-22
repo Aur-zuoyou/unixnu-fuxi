@@ -188,7 +188,7 @@ jobs:
           XNU_OWNER_ROOT_TRUST: "0"
           XNU_SHENG_PMGR: "0"
           XNU_SOURCE_MOCKFS: "0"
-          XNU_BOOT_PROGRESS: "1"
+          XNU_BOOT_PROGRESS: "0"
           XNU_SMMU4K_PROBE: "0"
           XNU_ADRENO_FIRMWARE_PROBE: "0"
           XNU_ADRENO_PM4_PROBE: "0"
