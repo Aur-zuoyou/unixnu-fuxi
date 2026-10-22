@@ -120,39 +120,53 @@ jobs:
           UNIXNU_XNU_DARWIN: ${{ github.event.inputs.xnu_darwin || '23.6.0' }}
           UNIXNU_XNU_VERSION: ${{ github.event.inputs.xnu_version || '10063.141.1' }}
           JOBS: "6"
-          # 以下照抄 UniXNU-sheng/configs/sheng_defconfig 的 CONFIG_XNU_*。
-          # 关键教训：offline-component-load-probes.patch 里有一处
-          # native_legacy_display_probe() 调用没有 #if 保护，所以
-          # XNU_NATIVE_LEGACY_DISPLAY 必须为 1，否则链接期报
-          # "Undefined symbols: _native_legacy_display_probe"。
+          # 完整照抄 UniXNU-sheng/configs/sheng_defconfig 的 CONFIG_XNU_*。
+          # CONFIG_XNU_<NAME>=y 对应 XNU_<NAME>=1。
           #
-          # CONFIG_XNU_NATIVE_UFS=y
-          XNU_NATIVE_UFS: "1"
-          # CONFIG_XNU_NATIVE_AES=y
-          XNU_NATIVE_AES: "1"
-          # CONFIG_XNU_NATIVE_VIRTIO_BLOCK=y
-          XNU_NATIVE_VIRTIO_BLOCK: "1"
-          # CONFIG_XNU_NATIVE_RAM_BLOCK=y
-          XNU_NATIVE_RAM_BLOCK: "1"
-          # CONFIG_XNU_SOURCE_CORECRYPTO14=y
-          XNU_SOURCE_CORECRYPTO14: "1"
-          # CONFIG_XNU_NATIVE_LEGACY_DISPLAY=y
-          XNU_NATIVE_LEGACY_DISPLAY: "1"
-          # CONFIG_XNU_NATIVE_ADRENO=y
-          XNU_NATIVE_ADRENO: "1"
-          # CONFIG_XNU_VERIFIED_ROOT_PROBE=y / OWNER_ROOT_AUDIT=y
-          XNU_VERIFIED_ROOT_PROBE: "1"
-          XNU_OWNER_ROOT_AUDIT: "1"
-          # CONFIG_XNU_OWNER_ROOT_TRUST=y
-          XNU_OWNER_ROOT_TRUST: "1"
-          # CONFIG_XNU_SHENG_PMGR=y
-          XNU_SHENG_PMGR: "1"
-          # 其余按 defconfig 默认
-          XNU_BOOT_PROGRESS: "0"
-          XNU_NATIVE_MOBILE_DISPLAY: "0"
+          # 教训一：offline-component-load-probes.patch 里 native_legacy_display_probe()
+          #   有一处调用没有 #if 保护，所以 NATIVE_LEGACY_DISPLAY 必须为 1，
+          #   否则链接期 "Undefined symbols: _native_legacy_display_probe"。
+          # 教训二：build-xnu-4k-baseline.sh L122 要求 ARMCPU=1 时必须
+          #   SOURCE_CORECRYPTO14=1 且（ARMVIRT_PLATFORM=1 或 ARM_DT_PLATFORM=1），
+          #   漏掉 ARM_DT_PLATFORM 会让脚本直接 exit 1 而日志里看不到错误。
+          XNU_SOURCE_CORECRYPTO14: "1"      # CONFIG_XNU_SOURCE_CORECRYPTO14=y
+          XNU_SOURCE_PTHREAD: "1"           # CONFIG_XNU_SOURCE_PTHREAD=y
+          XNU_ARM_DT_PLATFORM: "1"          # CONFIG_XNU_ARM_DT_PLATFORM=y
+          XNU_ARMCPU: "1"                   # CONFIG_XNU_ARMCPU=y
+          XNU_NATIVE_UFS: "1"               # CONFIG_XNU_NATIVE_UFS=y
+          XNU_NATIVE_AES: "1"               # CONFIG_XNU_NATIVE_AES=y
+          XNU_NATIVE_VIRTIO_BLOCK: "1"      # CONFIG_XNU_NATIVE_VIRTIO_BLOCK=y
+          XNU_NATIVE_RAM_BLOCK: "1"         # CONFIG_XNU_NATIVE_RAM_BLOCK=y
+          XNU_TRUST_CACHE_RUNTIME: "1"      # CONFIG_XNU_TRUST_CACHE_RUNTIME=y
+          XNU_SOURCE_MOCKFS: "1"            # CONFIG_XNU_SOURCE_MOCKFS=y
+          XNU_NATIVE_CS_HASH_CACHE: "1"     # CONFIG_XNU_NATIVE_CS_HASH_CACHE=y
+          XNU_VERIFIED_ROOT_PROBE: "1"      # CONFIG_XNU_VERIFIED_ROOT_PROBE=y
+          XNU_OWNER_ROOT_AUDIT: "1"         # CONFIG_XNU_OWNER_ROOT_AUDIT=y
+          XNU_OWNER_ROOT_TRUST: "1"         # CONFIG_XNU_OWNER_ROOT_TRUST=y
+          XNU_SHENG_PMGR: "1"               # CONFIG_XNU_SHENG_PMGR=y
+          XNU_OWNER_CACHE_MOUNT: "1"        # CONFIG_XNU_OWNER_CACHE_MOUNT=y
+          XNU_OWNER_CACHE_STARTUP: "1"      # CONFIG_XNU_OWNER_CACHE_STARTUP=y
+          XNU_OWNER_BOOT_MANIFEST: "1"      # CONFIG_XNU_OWNER_BOOT_MANIFEST=y
+          XNU_OWNER_DATA_MOUNT: "1"         # CONFIG_XNU_OWNER_DATA_MOUNT=y
+          XNU_OWNER_UNION_SYSTEMOS: "1"     # CONFIG_XNU_OWNER_UNION_SYSTEMOS=y
+          XNU_DT_PANIC_REGION: "1"          # CONFIG_XNU_DT_PANIC_REGION=y
+          XNU_ZONE_PGZ_ALIGNMENT_PROBE: "1" # CONFIG_XNU_ZONE_PGZ_ALIGNMENT_PROBE=y
+          XNU_NATIVE_ARCH_TIMER: "1"        # CONFIG_XNU_NATIVE_ARCH_TIMER=y
+          XNU_NATIVE_PAN: "1"               # CONFIG_XNU_NATIVE_PAN=y
+          XNU_BOOT_PROGRESS: "1"            # CONFIG_XNU_BOOT_PROGRESS=y
+          XNU_NATIVE_LEGACY_DISPLAY: "1"    # CONFIG_XNU_NATIVE_LEGACY_DISPLAY=y
+          XNU_NATIVE_ADRENO: "1"            # CONFIG_XNU_NATIVE_ADRENO=y
+          # n 的几项
+          XNU_NATIVE_MOBILE_DISPLAY: "0"    # CONFIG_XNU_NATIVE_MOBILE_DISPLAY=n
+          XNU_ARMVIRT_PLATFORM: "0"         # CONFIG_XNU_ARMVIRT_PLATFORM=n
           XNU_SMMU4K_PROBE: "0"
           XNU_BUILD_WERROR: "0"
+          # 只在 config 里出现的字符串项
           XNU_CRYPTO_BOOTSTRAP: "prelinked"
+          XNU_OWNER_DATA_VOLUME_UUID: "18AB5557-DC2D-469B-8758-855E60F5B0DF"
+          XNU_NATIVE_VIRTIO_BLOCK_ARCHIVE: "{tree}/build/native-virtio-block-verified-bundle/libNativeVirtioBlock.a"
+          XNU_VERIFIED_ROOT_ARCHIVE: "{tree}/build/verified-root-os-xnu-bundle/libVerifiedRootProbe.a"
+          XNU_EXTRA_LD_ARCHIVES: ""
         run: |
           set -euo pipefail
           cd UniXNU

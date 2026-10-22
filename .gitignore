@@ -16,3 +16,13 @@ __pycache__/
 rom/xnu/qemu-payload.bin
 rom/xnu/payload.bin
 rom/xnu/*.bin
+
+# 编译产物
+loader-shim-fuxi/*.o
+loader-shim-fuxi/*.elf
+loader-shim-fuxi/Image
+loader-shim-fuxi/Image2.bin
+loader-shim-fuxi/strcmp_stub.c
+
+# 临时生成的中间包
+vendor/uefi-sheng-fuxi.tar.gz
