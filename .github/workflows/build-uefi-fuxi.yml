@@ -104,6 +104,12 @@ jobs:
           tar -xzf vendor/UniXNU.tar.gz -C .
           test -f UniXNU/drivers/DarwinBoot/DarwinBootPkg/Driver/DarwinBoot.inf
 
+          # Qualcomm 预编译二进制：fuxi 的设备代号是 marble，
+          # fuxi.dsc 通过 Binaries/marble/ 引用 DevicePathDxe 等 INF。
+          # 上游 Device-Binaries 仓库很大（555MB，含所有机型），只取 marble。
+          tar -xzf vendor/uefi-sheng-binaries-marble.tar.gz -C .
+          test -f uefi-sheng/Binaries/marble/MdeModulePkg/Universal/DevicePathDxe/DevicePathDxe.inf
+
           # 子模块（Silicium-ACPI / Common/Mu / Mu_OEM_Sample）
           # 直接从 vendor 解包，不依赖 GitHub zip 下载是否完整
           tar -xzf vendor/uefi-sheng-submodules.tar.gz -C .
@@ -120,8 +126,7 @@ jobs:
           for spec in \
             "Common/Mu|https://github.com/microsoft/mu_plus/archive/refs/heads/release/202608.zip" \
             "Common/Mu_OEM_Sample|https://github.com/microsoft/mu_oem_sample/archive/refs/heads/release/202608.zip" \
-            "Silicium-ACPI|https://github.com/Project-Silicium/Silicium-ACPI/archive/refs/heads/main.zip" \
-            "Binaries|https://github.com/Project-Silicium/Device-Binaries/archive/refs/heads/main.zip"
+            "Silicium-ACPI|https://github.com/Project-Silicium/Silicium-ACPI/archive/refs/heads/main.zip"
           do
             dst="uefi-sheng/${spec%%|*}"
             url="${spec##*|}"
