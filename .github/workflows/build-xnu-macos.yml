@@ -170,8 +170,18 @@ jobs:
         run: |
           set -euo pipefail
           cd UniXNU
-          bash scripts/build-xnu-4k-baseline.sh 2>&1 | tee build-xnu.log
-          echo "---- 退出码 ${PIPESTATUS[0]} ----"
+          # 保留完整 trace：脚本内部有若干 `exit 1` 前置检查，失败时只打印
+          # 一行说明甚至什么都不打印，普通日志看不出停在哪一步。
+          PS4='+ [$LINENO] '
+          bash -x scripts/build-xnu-4k-baseline.sh > build-xnu-trace.log 2>&1
+          rc=$?
+          echo "---- 退出码 $rc ----"
+          # 把 trace 的尾部也打出来，方便直接看
+          echo "===== trace 尾部 200 行 ====="
+          tail -200 build-xnu-trace.log
+          # build-xnu.log 是脚本内部 tee 的产物
+          [ -f build-xnu.log ] && cp build-xnu.log build-xnu-tail.log || true
+          exit $rc
 
       - name: 列出产物
         if: always()
@@ -193,6 +203,7 @@ jobs:
             UniXNU/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped
             UniXNU/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837
             UniXNU/build-xnu.log
+            UniXNU/build-xnu-trace.log
             UniXNU/build/xnu/ios-sym/**/*.dSYM/**
           if-no-files-found: warn
           retention-days: 14
@@ -204,5 +215,6 @@ jobs:
           name: xnu-macos-log-${{ github.run_number }}
           path: |
             UniXNU/build-xnu.log
+            UniXNU/build-xnu-trace.log
           if-no-files-found: warn
           retention-days: 7
