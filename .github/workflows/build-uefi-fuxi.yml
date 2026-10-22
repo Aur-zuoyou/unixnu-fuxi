@@ -104,6 +104,12 @@ jobs:
           tar -xzf vendor/UniXNU.tar.gz -C .
           test -f UniXNU/drivers/DarwinBoot/DarwinBootPkg/Driver/DarwinBoot.inf
 
+          # 子模块（Silicium-ACPI / Common/Mu / Mu_OEM_Sample）
+          # 直接从 vendor 解包，不依赖 GitHub zip 下载是否完整
+          tar -xzf vendor/uefi-sheng-submodules.tar.gz -C .
+          test -d uefi-sheng/Silicium-ACPI/Silicon/Qualcomm
+          test -d uefi-sheng/Common/Mu
+
           # Mu 基座
           mkdir -p UniXNU/package
           fetch_zip mu_basecore-release-202608 \
@@ -122,11 +128,33 @@ jobs:
             if [ -d "$dst" ] && [ -n "$(ls -A "$dst" 2>/dev/null)" ]; then
               echo "$dst 已存在，跳过"; continue
             fi
-            fetch_zip _sub "$url" || { echo "跳过 $dst"; continue; }
+            if ! fetch_zip _sub "$url"; then
+              echo "!! 下载失败，跳过 $dst"
+              continue
+            fi
+            # zip 解压后可能多一层同名目录，找到实际的根再搬
+            root="_sub"
+            if [ "$(ls -A _sub | wc -l)" -eq 1 ] && [ -d "_sub/$(ls -A _sub | head -1)" ]; then
+              root="_sub/$(ls -A _sub | head -1)"
+              echo "  多一层目录，根改为 $root"
+            fi
             mkdir -p "$dst"
-            mv _sub/* "$dst/" 2>/dev/null || true
+            # 注意：mv dir/* 不包含隐藏文件（如 .github），所以用 cp -a + .
+            cp -a "$root/." "$dst/" 2>/dev/null || cp -a "$root"/* "$dst/" 2>/dev/null || true
             rm -rf _sub
-            echo "$dst 补齐: $(ls "$dst" | head -3 | tr '\n' ' ')"
+            echo "$dst 补齐: $(ls "$dst" 2>/dev/null | head -5 | tr '\n' ' ')"
+            echo "$dst 条目数: $(find "$dst" -type f 2>/dev/null | wc -l)"
+          done
+
+          # 逐个确认关键子目录确实到位（EDK2 对不存在的 PACKAGES_PATH 目录直接报 000E）
+          echo "---- 子模块内容检查 ----"
+          for d in uefi-sheng/Common/Mu uefi-sheng/Common/Mu_OEM_Sample \
+                   uefi-sheng/Silicium-ACPI/Silicon/Qualcomm; do
+            if [ -d "$d" ]; then
+              echo "OK   $d ($(find "$d" -type f | wc -l) 文件)"
+            else
+              echo "MISS $d"
+            fi
           done
 
           # openssl 是钉死 commit 的 submodule；PACKAGES_PATH 一旦指向不存在的
