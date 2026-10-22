@@ -153,7 +153,12 @@ jobs:
           XNU_ZONE_PGZ_ALIGNMENT_PROBE: "1" # CONFIG_XNU_ZONE_PGZ_ALIGNMENT_PROBE=y
           XNU_NATIVE_ARCH_TIMER: "1"        # CONFIG_XNU_NATIVE_ARCH_TIMER=y
           XNU_NATIVE_PAN: "1"               # CONFIG_XNU_NATIVE_PAN=y
-          XNU_BOOT_PROGRESS: "1"            # CONFIG_XNU_BOOT_PROGRESS=y
+          # CONFIG_XNU_BOOT_PROGRESS=y 对应的脚本 scripts/build-boot-progress.py
+          # 不在 UniXNU 公开仓库里（只有 check-boot-progress-code.py），
+          # 它属于完整的 kit 体系。设成 0 跳过这一步。
+          # 影响：内核不带启动进度日志（offline-legacy-phase 之类），
+          # 但引导本身不依赖它。
+          XNU_BOOT_PROGRESS: "0"
           XNU_NATIVE_LEGACY_DISPLAY: "1"    # CONFIG_XNU_NATIVE_LEGACY_DISPLAY=y
           XNU_NATIVE_ADRENO: "1"            # CONFIG_XNU_NATIVE_ADRENO=y
           # n 的几项
