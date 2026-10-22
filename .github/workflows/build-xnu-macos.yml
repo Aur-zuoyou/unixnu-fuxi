@@ -1,0 +1,171 @@
+name: build-xnu-macos
+
+# 用 UniXNU 官方方法在 macOS runner 上编 XNU 内核。
+#
+# 官方流程（UniXNU-sheng/README.md）：
+#   ./unixnu build kernel   →  内部调用 scripts/build-xnu-4k-baseline.sh
+# 该脚本需要 Xcode 的 iPhoneOS SDK 和 ditto，只能在 macOS 上跑。
+#
+# 这里直接调用脚本本身，跳过 unixnu 驱动的 fetch/ipsw 步骤（那些需要在本地
+# 准备好 IPSW 和 device repo），把等价的环境变量手工备齐。
+#
+# 产物：build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf
+
+on:
+  push:
+    paths:
+      - ".github/workflows/build-xnu-macos.yml"
+      - "vendor/UniXNU-full.tar.gz"
+  workflow_dispatch:
+    inputs:
+      xnu_tag:
+        description: "XNU tag（默认官方 10063 = iOS 17）"
+        required: false
+        default: "xnu-10063.141.1"
+      xnu_commit:
+        description: "XNU commit（与 tag 对应）"
+        required: false
+        default: "d8b80295118ef25ac3a784134bcf95cd8e88109f"
+      xnu_darwin:
+        description: "Darwin 版本"
+        required: false
+        default: "23.6.0"
+      xnu_version:
+        description: "XNU 版本号"
+        required: false
+        default: "10063.141.1"
+
+concurrency:
+  group: xnu-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 180
+
+    steps:
+      - name: 取本仓库（vendor/ 里的 UniXNU 源码包）
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            vendor
+          sparse-checkout-cone-mode: false
+
+      - name: 环境信息
+        run: |
+          set -eux
+          sw_vers
+          xcode-select -p
+          xcodebuild -version || true
+          clang --version | head -2
+          sysctl -n hw.ncpu
+          echo "runner: $RUNNER_OS $RUNNER_ARCH"
+
+      - name: 解包 UniXNU 完整源码
+        run: |
+          set -eux
+          tar -xzf vendor/UniXNU-full.tar.gz -C .
+          ls UniXNU
+          test -f UniXNU/scripts/build-xnu-4k-baseline.sh
+          test -f UniXNU/patches/xnu/native-4k-user-abi.patch
+          test -f UniXNU/kits/NativePrelink/emit_prelink.py
+          echo "补丁数: $(ls UniXNU/patches/xnu/*.patch | wc -l)"
+
+      - name: 装构建依赖
+        run: |
+          set -eux
+          brew install cmake ninja unifdef || true
+          for t in git make clang cmake ninja unifdef python3 ditto; do
+            command -v "$t" || { echo "缺少 $t"; exit 1; }
+          done
+
+      # Xcode 15+ 的 SDK 没有 availability.pl，xnu 的 makefile 会因此失败。
+      # 官方 build_uefi.py 也处理这个问题；这里造一个最小替身。
+      - name: 准备 availability.pl
+        run: |
+          set -eux
+          SDK="$(xcrun --sdk macosx --show-sdk-path)"
+          AVA="$SDK/usr/local/libexec/availability.pl"
+          if [ ! -x "$AVA" ]; then
+            echo "SDK 里没有 availability.pl，造替身"
+            mkdir -p "$(dirname "$AVA")" 2>/dev/null || true
+            printf '#!/usr/bin/env perl\nexit 0;\n' > "$AVA" 2>/dev/null || {
+              echo "无法写入 SDK，改用 fake root"
+              mkdir -p "$RUNNER_TEMP/fakeroot/usr/local/bin"
+              printf '#!/usr/bin/env perl\nexit 0;\n' > "$RUNNER_TEMP/fakeroot/usr/local/bin/availability.pl"
+              chmod +x "$RUNNER_TEMP/fakeroot/usr/local/bin/availability.pl"
+            }
+            chmod +x "$AVA" 2>/dev/null || true
+          fi
+          echo "availability.pl 检查完成"
+
+      - name: 概要（源码版本与补丁）
+        run: |
+          set -eux
+          echo "XNU_TAG=${{ github.event.inputs.xnu_tag || 'xnu-10063.141.1' }}"
+          echo "XNU_COMMIT=${{ github.event.inputs.xnu_commit || 'd8b80295118ef25ac3a784134bcf95cd8e88109f' }}"
+          echo "XNU_DARWIN=${{ github.event.inputs.xnu_darwin || '23.6.0' }}"
+          echo "XNU_VERSION=${{ github.event.inputs.xnu_version || '10063.141.1' }}"
+          echo "--- 补丁清单 ---"
+          ls UniXNU/patches/xnu/ | head -60
+
+      - name: 编 XNU（官方 build-xnu-4k-baseline.sh）
+        env:
+          UNIXNU_XNU_TAG: ${{ github.event.inputs.xnu_tag || 'xnu-10063.141.1' }}
+          UNIXNU_XNU_COMMIT: ${{ github.event.inputs.xnu_commit || 'd8b80295118ef25ac3a784134bcf95cd8e88109f' }}
+          UNIXNU_XNU_DARWIN: ${{ github.event.inputs.xnu_darwin || '23.6.0' }}
+          UNIXNU_XNU_VERSION: ${{ github.event.inputs.xnu_version || '10063.141.1' }}
+          # 全部可选特性关掉：先只求编出一个能用的基线内核
+          XNU_BOOT_PROGRESS: "0"
+          XNU_NATIVE_UFS: "0"
+          XNU_OWNER_ROOT_AUDIT: "0"
+          XNU_NATIVE_VIRTIO_BLOCK: "0"
+          XNU_SOURCE_CORECRYPTO14: "0"
+          XNU_NATIVE_ADRENO: "0"
+          XNU_NATIVE_AES: "0"
+          XNU_SMMU4K_PROBE: "0"
+          XNU_BUILD_WERROR: "0"
+          JOBS: "6"
+        run: |
+          set -euo pipefail
+          cd UniXNU
+          bash scripts/build-xnu-4k-baseline.sh 2>&1 | tee build-xnu.log
+          echo "---- 退出码 ${PIPESTATUS[0]} ----"
+
+      - name: 列出产物
+        if: always()
+        run: |
+          set -eux
+          cd UniXNU
+          echo "=== build/xnu 下的内核 ==="
+          find build -type f \( -name "mach.*" -o -name "kernel*" \) 2>/dev/null | head -40 || true
+          echo "=== ios-obj 目录 ==="
+          ls -la build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/ 2>/dev/null | head -40 || true
+
+      - name: 上传产物
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xnu-macos-${{ github.run_number }}
+          path: |
+            UniXNU/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf
+            UniXNU/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped
+            UniXNU/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837
+            UniXNU/build-xnu.log
+            UniXNU/build/xnu/ios-sym/**/*.dSYM/**
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: 上传日志（失败时也保留）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xnu-macos-log-${{ github.run_number }}
+          path: |
+            UniXNU/build-xnu.log
+          if-no-files-found: warn
+          retention-days: 7
