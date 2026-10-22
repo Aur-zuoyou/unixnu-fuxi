@@ -119,17 +119,40 @@ jobs:
           UNIXNU_XNU_COMMIT: ${{ github.event.inputs.xnu_commit || 'd8b80295118ef25ac3a784134bcf95cd8e88109f' }}
           UNIXNU_XNU_DARWIN: ${{ github.event.inputs.xnu_darwin || '23.6.0' }}
           UNIXNU_XNU_VERSION: ${{ github.event.inputs.xnu_version || '10063.141.1' }}
-          # 全部可选特性关掉：先只求编出一个能用的基线内核
+          JOBS: "6"
+          # 以下照抄 UniXNU-sheng/configs/sheng_defconfig 的 CONFIG_XNU_*。
+          # 关键教训：offline-component-load-probes.patch 里有一处
+          # native_legacy_display_probe() 调用没有 #if 保护，所以
+          # XNU_NATIVE_LEGACY_DISPLAY 必须为 1，否则链接期报
+          # "Undefined symbols: _native_legacy_display_probe"。
+          #
+          # CONFIG_XNU_NATIVE_UFS=y
+          XNU_NATIVE_UFS: "1"
+          # CONFIG_XNU_NATIVE_AES=y
+          XNU_NATIVE_AES: "1"
+          # CONFIG_XNU_NATIVE_VIRTIO_BLOCK=y
+          XNU_NATIVE_VIRTIO_BLOCK: "1"
+          # CONFIG_XNU_NATIVE_RAM_BLOCK=y
+          XNU_NATIVE_RAM_BLOCK: "1"
+          # CONFIG_XNU_SOURCE_CORECRYPTO14=y
+          XNU_SOURCE_CORECRYPTO14: "1"
+          # CONFIG_XNU_NATIVE_LEGACY_DISPLAY=y
+          XNU_NATIVE_LEGACY_DISPLAY: "1"
+          # CONFIG_XNU_NATIVE_ADRENO=y
+          XNU_NATIVE_ADRENO: "1"
+          # CONFIG_XNU_VERIFIED_ROOT_PROBE=y / OWNER_ROOT_AUDIT=y
+          XNU_VERIFIED_ROOT_PROBE: "1"
+          XNU_OWNER_ROOT_AUDIT: "1"
+          # CONFIG_XNU_OWNER_ROOT_TRUST=y
+          XNU_OWNER_ROOT_TRUST: "1"
+          # CONFIG_XNU_SHENG_PMGR=y
+          XNU_SHENG_PMGR: "1"
+          # 其余按 defconfig 默认
           XNU_BOOT_PROGRESS: "0"
-          XNU_NATIVE_UFS: "0"
-          XNU_OWNER_ROOT_AUDIT: "0"
-          XNU_NATIVE_VIRTIO_BLOCK: "0"
-          XNU_SOURCE_CORECRYPTO14: "0"
-          XNU_NATIVE_ADRENO: "0"
-          XNU_NATIVE_AES: "0"
+          XNU_NATIVE_MOBILE_DISPLAY: "0"
           XNU_SMMU4K_PROBE: "0"
           XNU_BUILD_WERROR: "0"
-          JOBS: "6"
+          XNU_CRYPTO_BOOTSTRAP: "prelinked"
         run: |
           set -euo pipefail
           cd UniXNU
