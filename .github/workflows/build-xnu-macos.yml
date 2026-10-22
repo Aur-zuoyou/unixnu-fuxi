@@ -222,6 +222,11 @@ jobs:
           XNU_ZONE_PGZ_ALIGNMENT_PROBE: "1"
           XNU_CRYPTO_BOOTSTRAP: "prelinked"
           XNU_BUILD_WERROR: "0"
+          # 对齐 unixnu 驱动 scripts/unixnu/kernel.py L80-94 的第一遍：
+          # 从零编译时先跑一次 XNU_BOOTSTRAP=1 的 pass，跳过 archive 检查、
+          # 只产出编译记录（startup.o.json / *.cpo.json），
+          # 然后才 build_archives + 第二遍完整链接。
+          XNU_BOOTSTRAP: "1"
         run: |
           set -euo pipefail
           cd UniXNU
