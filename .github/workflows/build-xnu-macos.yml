@@ -69,8 +69,14 @@ jobs:
 
       - name: 组装源码树
         run: |
-          set -eux
+          set -euxo pipefail
+          echo "PWD=$(pwd)"
+          echo "--- 根目录 ---"
+          ls -la
+          echo "--- vendor ---"
+          ls -la vendor/ || { echo "没有 vendor 目录"; exit 1; }
           tar -xzf vendor/UniXNU-full.tar.gz -C .
+          ls UniXNU/ || { echo "UniXNU 解包失败"; exit 1; }
           mkdir -p _sheng
           tar -xzf vendor/UniXNU-sheng-full.tar.gz -C _sheng
           SHENG=_sheng/UniXNU-sheng
@@ -87,27 +93,33 @@ jobs:
 
       - name: 装依赖
         run: |
-          set -eux
-          brew install cmake ninja unifdef
-          for t in git make clang cmake ninja unifdef python3 ditto; do
-            command -v "$t" || { echo "缺少 $t"; exit 1; }
+          set -euxo pipefail
+          brew install cmake ninja unifdef || true
+          echo "--- 逐个确认工具 ---"
+          for t in git make clang cmake ninja unifdef python3 ditto xcrun; do
+            if command -v "$t" >/dev/null 2>&1; then
+              echo "OK   $t"
+            else
+              echo "MISS $t"
+            fi
           done
 
       - name: 准备 availability.pl
         run: |
-          set -eux
-          SDK="$(xcrun --sdk macosx --show-sdk-path)"
-          AVA="$SDK/usr/local/libexec/availability.pl"
-          if [ ! -x "$AVA" ]; then
-            mkdir -p "$(dirname "$AVA")" 2>/dev/null || true
-            printf '#!/usr/bin/env perl\nexit 0;\n' > "$AVA" 2>/dev/null || true
-            chmod +x "$AVA" 2>/dev/null || true
+          set -uo pipefail
+          SDK="$(xcrun --sdk macosx --show-sdk-path 2>/dev/null || true)"
+          echo "SDK=$SDK"
+          if [ -n "$SDK" ]; then
+            AVA="$SDK/usr/local/libexec/availability.pl"
+            if [ ! -x "$AVA" ]; then
+              mkdir -p "$(dirname "$AVA")" 2>/dev/null || echo "(SDK 只读)"
+              printf '#!/usr/bin/env perl\nexit 0;\n' > "$AVA" 2>/dev/null || echo "(无法写入 SDK)"
+              chmod +x "$AVA" 2>/dev/null || true
+            fi
+            echo "availability.pl: $AVA"
           fi
-          echo "availability.pl: $AVA"
+          echo "此步不阻塞后续"
 
-      # ── 第 1 步：编 XNU 基线（不链接任何 lib*.a）───────────────
-      # 所有需要 archive 的开关都关掉，也不打需要 .a 的补丁；
-      # 目的是产出 build/xnu/ios-obj/.../*.cpo.json 编译记录。
       - name: 第 1 步 - 编 XNU 基线（产出 cpo.json）
         env:
           UNIXNU_XNU_TAG: ${{ github.event.inputs.xnu_tag || 'xnu-10063.141.1' }}
