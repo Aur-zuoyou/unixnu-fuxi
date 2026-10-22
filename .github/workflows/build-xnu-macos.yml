@@ -2,20 +2,24 @@ name: build-xnu-macos
 
 # 用 UniXNU 官方方法在 macOS runner 上编 XNU 内核。
 #
-# 官方流程（UniXNU-sheng/README.md）：
-#   ./unixnu build kernel   →  内部调用 scripts/build-xnu-4k-baseline.sh
-# 该脚本需要 Xcode 的 iPhoneOS SDK 和 ditto，只能在 macOS 上跑。
+# 官方流程（docs/guide/build-kernel.md「Build sequence」）：
+#   1. unixnu fetch                     克隆 XNU 与 Apple 参考源
+#   2. unixnu build kernel              打补丁、编 XNU（此时还没有那些 lib*.a）
+#   3. 构建设备 archive                  用第 2 步留下的 .cpo.json 编译每个 .a
+#   4. unixnu build kernel              第二次，链接 archive
+#   5. unixnu build prelink             产出 kernel.macho
 #
-# 这里直接调用脚本本身，跳过 unixnu 驱动的 fetch/ipsw 步骤（那些需要在本地
-# 准备好 IPSW 和 device repo），把等价的环境变量手工备齐。
-#
-# 产物：build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf
+# 关键：lib*.a 的源码在 UniXNU/drivers/，构建脚本在
+# UniXNU-sheng/scripts/build-arm-driver.py（文档说 "The device repository
+# owns the scripts that produce its archives"），所以要把设备仓库的
+# scripts/ 叠加到 UniXNU 树上运行。
 
 on:
   push:
     paths:
       - ".github/workflows/build-xnu-macos.yml"
       - "vendor/UniXNU-full.tar.gz"
+      - "vendor/UniXNU-sheng-full.tar.gz"
   workflow_dispatch:
     inputs:
       xnu_tag:
@@ -23,7 +27,7 @@ on:
         required: false
         default: "xnu-10063.141.1"
       xnu_commit:
-        description: "XNU commit（与 tag 对应）"
+        description: "XNU commit"
         required: false
         default: "d8b80295118ef25ac3a784134bcf95cd8e88109f"
       xnu_darwin:
@@ -45,10 +49,10 @@ permissions:
 jobs:
   build:
     runs-on: macos-15
-    timeout-minutes: 180
+    timeout-minutes: 300
 
     steps:
-      - name: 取本仓库（vendor/ 里的 UniXNU 源码包）
+      - name: 取本仓库
         uses: actions/checkout@v4
         with:
           sparse-checkout: |
@@ -61,165 +65,148 @@ jobs:
           sw_vers
           xcode-select -p
           xcodebuild -version || true
-          clang --version | head -2
           sysctl -n hw.ncpu
-          echo "runner: $RUNNER_OS $RUNNER_ARCH"
 
-      - name: 解包 UniXNU 完整源码
+      - name: 组装源码树
         run: |
           set -eux
           tar -xzf vendor/UniXNU-full.tar.gz -C .
-          ls UniXNU
+          mkdir -p _sheng
+          tar -xzf vendor/UniXNU-sheng-full.tar.gz -C _sheng
+          SHENG=_sheng/UniXNU-sheng
+
+          # build-arm-driver.py 里 ROOT = scripts/../ 即 UniXNU 根，
+          # 它读 ROOT/drivers/<comp>/<comp>.cpp 和
+          # ROOT/build/xnu/.../*.cpo.json。所以把设备仓库 scripts 叠进去。
+          cp -a "$SHENG/scripts/." UniXNU/scripts/
+
           test -f UniXNU/scripts/build-xnu-4k-baseline.sh
-          test -f UniXNU/patches/xnu/native-4k-user-abi.patch
-          test -f UniXNU/kits/NativePrelink/emit_prelink.py
+          test -f UniXNU/scripts/build-arm-driver.py
+          test -f UniXNU/drivers/NativeUfs/NativeUfs.cpp
           echo "补丁数: $(ls UniXNU/patches/xnu/*.patch | wc -l)"
 
-      - name: 装构建依赖
+      - name: 装依赖
         run: |
           set -eux
-          brew install cmake ninja unifdef || true
+          brew install cmake ninja unifdef
           for t in git make clang cmake ninja unifdef python3 ditto; do
             command -v "$t" || { echo "缺少 $t"; exit 1; }
           done
 
-      # Xcode 15+ 的 SDK 没有 availability.pl，xnu 的 makefile 会因此失败。
-      # 官方 build_uefi.py 也处理这个问题；这里造一个最小替身。
       - name: 准备 availability.pl
         run: |
           set -eux
           SDK="$(xcrun --sdk macosx --show-sdk-path)"
           AVA="$SDK/usr/local/libexec/availability.pl"
           if [ ! -x "$AVA" ]; then
-            echo "SDK 里没有 availability.pl，造替身"
             mkdir -p "$(dirname "$AVA")" 2>/dev/null || true
-            printf '#!/usr/bin/env perl\nexit 0;\n' > "$AVA" 2>/dev/null || {
-              echo "无法写入 SDK，改用 fake root"
-              mkdir -p "$RUNNER_TEMP/fakeroot/usr/local/bin"
-              printf '#!/usr/bin/env perl\nexit 0;\n' > "$RUNNER_TEMP/fakeroot/usr/local/bin/availability.pl"
-              chmod +x "$RUNNER_TEMP/fakeroot/usr/local/bin/availability.pl"
-            }
+            printf '#!/usr/bin/env perl\nexit 0;\n' > "$AVA" 2>/dev/null || true
             chmod +x "$AVA" 2>/dev/null || true
           fi
-          echo "availability.pl 检查完成"
+          echo "availability.pl: $AVA"
 
-      - name: 概要（源码版本与补丁）
-        run: |
-          set -eux
-          echo "XNU_TAG=${{ github.event.inputs.xnu_tag || 'xnu-10063.141.1' }}"
-          echo "XNU_COMMIT=${{ github.event.inputs.xnu_commit || 'd8b80295118ef25ac3a784134bcf95cd8e88109f' }}"
-          echo "XNU_DARWIN=${{ github.event.inputs.xnu_darwin || '23.6.0' }}"
-          echo "XNU_VERSION=${{ github.event.inputs.xnu_version || '10063.141.1' }}"
-          echo "--- 补丁清单 ---"
-          ls UniXNU/patches/xnu/ | head -60
-
-      - name: 编 XNU（官方 build-xnu-4k-baseline.sh）
+      # ── 第 1 步：编 XNU 基线（不链接任何 lib*.a）───────────────
+      # 所有需要 archive 的开关都关掉，也不打需要 .a 的补丁；
+      # 目的是产出 build/xnu/ios-obj/.../*.cpo.json 编译记录。
+      - name: 第 1 步 - 编 XNU 基线（产出 cpo.json）
         env:
           UNIXNU_XNU_TAG: ${{ github.event.inputs.xnu_tag || 'xnu-10063.141.1' }}
           UNIXNU_XNU_COMMIT: ${{ github.event.inputs.xnu_commit || 'd8b80295118ef25ac3a784134bcf95cd8e88109f' }}
           UNIXNU_XNU_DARWIN: ${{ github.event.inputs.xnu_darwin || '23.6.0' }}
           UNIXNU_XNU_VERSION: ${{ github.event.inputs.xnu_version || '10063.141.1' }}
           JOBS: "6"
-          # 完整照抄 UniXNU-sheng/configs/sheng_defconfig 的 CONFIG_XNU_*。
-          # CONFIG_XNU_<NAME>=y 对应 XNU_<NAME>=1。
-          #
-          # 教训一：offline-component-load-probes.patch 里 native_legacy_display_probe()
-          #   有一处调用没有 #if 保护，所以 NATIVE_LEGACY_DISPLAY 必须为 1，
-          #   否则链接期 "Undefined symbols: _native_legacy_display_probe"。
-          # 教训二：build-xnu-4k-baseline.sh L122 要求 ARMCPU=1 时必须
-          #   SOURCE_CORECRYPTO14=1 且（ARMVIRT_PLATFORM=1 或 ARM_DT_PLATFORM=1），
-          #   漏掉 ARM_DT_PLATFORM 会让脚本直接 exit 1 而日志里看不到错误。
-          XNU_SOURCE_CORECRYPTO14: "1"      # CONFIG_XNU_SOURCE_CORECRYPTO14=y
-          XNU_SOURCE_PTHREAD: "1"           # CONFIG_XNU_SOURCE_PTHREAD=y
-          XNU_ARM_DT_PLATFORM: "1"          # CONFIG_XNU_ARM_DT_PLATFORM=y
-          XNU_ARMCPU: "1"                   # CONFIG_XNU_ARMCPU=y
-          XNU_NATIVE_UFS: "1"               # CONFIG_XNU_NATIVE_UFS=y
-          XNU_NATIVE_AES: "1"               # CONFIG_XNU_NATIVE_AES=y
-          XNU_NATIVE_VIRTIO_BLOCK: "1"      # CONFIG_XNU_NATIVE_VIRTIO_BLOCK=y
-          XNU_NATIVE_RAM_BLOCK: "1"         # CONFIG_XNU_NATIVE_RAM_BLOCK=y
-          XNU_TRUST_CACHE_RUNTIME: "1"      # CONFIG_XNU_TRUST_CACHE_RUNTIME=y
-          XNU_SOURCE_MOCKFS: "1"            # CONFIG_XNU_SOURCE_MOCKFS=y
-          XNU_NATIVE_CS_HASH_CACHE: "1"     # CONFIG_XNU_NATIVE_CS_HASH_CACHE=y
-          XNU_VERIFIED_ROOT_PROBE: "1"      # CONFIG_XNU_VERIFIED_ROOT_PROBE=y
-          XNU_OWNER_ROOT_AUDIT: "1"         # CONFIG_XNU_OWNER_ROOT_AUDIT=y
-          XNU_OWNER_ROOT_TRUST: "1"         # CONFIG_XNU_OWNER_ROOT_TRUST=y
-          XNU_SHENG_PMGR: "1"               # CONFIG_XNU_SHENG_PMGR=y
-          XNU_OWNER_CACHE_MOUNT: "1"        # CONFIG_XNU_OWNER_CACHE_MOUNT=y
-          XNU_OWNER_CACHE_STARTUP: "1"      # CONFIG_XNU_OWNER_CACHE_STARTUP=y
-          XNU_OWNER_BOOT_MANIFEST: "1"      # CONFIG_XNU_OWNER_BOOT_MANIFEST=y
-          XNU_OWNER_DATA_MOUNT: "1"         # CONFIG_XNU_OWNER_DATA_MOUNT=y
-          XNU_OWNER_UNION_SYSTEMOS: "1"     # CONFIG_XNU_OWNER_UNION_SYSTEMOS=y
-          XNU_DT_PANIC_REGION: "1"          # CONFIG_XNU_DT_PANIC_REGION=y
-          XNU_ZONE_PGZ_ALIGNMENT_PROBE: "1" # CONFIG_XNU_ZONE_PGZ_ALIGNMENT_PROBE=y
-          XNU_NATIVE_ARCH_TIMER: "1"        # CONFIG_XNU_NATIVE_ARCH_TIMER=y
-          XNU_NATIVE_PAN: "1"               # CONFIG_XNU_NATIVE_PAN=y
-          # CONFIG_XNU_BOOT_PROGRESS=y 对应的脚本 scripts/build-boot-progress.py
-          # 不在 UniXNU 公开仓库里（只有 check-boot-progress-code.py），
-          # 它属于完整的 kit 体系。设成 0 跳过这一步。
-          # 影响：内核不带启动进度日志（offline-legacy-phase 之类），
-          # 但引导本身不依赖它。
+          XNU_SOURCE_CORECRYPTO14: "0"
+          XNU_SOURCE_PTHREAD: "0"
+          XNU_ARM_DT_PLATFORM: "0"
+          XNU_ARMVIRT_PLATFORM: "0"
+          XNU_ARMCPU: "0"
+          XNU_NATIVE_UFS: "0"
+          XNU_NATIVE_AES: "0"
+          XNU_NATIVE_VIRTIO_BLOCK: "0"
+          XNU_NATIVE_RAM_BLOCK: "0"
+          XNU_NATIVE_VIRTIO_CONSOLE: "0"
+          XNU_NATIVE_MOBILE_DISPLAY: "0"
+          XNU_NATIVE_LEGACY_DISPLAY: "0"
+          XNU_NATIVE_ADRENO: "0"
+          XNU_NATIVE_OFFLINE_GPU: "0"
+          XNU_VERIFIED_ROOT_PROBE: "0"
+          XNU_OWNER_ROOT_AUDIT: "0"
+          XNU_OWNER_ROOT_TRUST: "0"
+          XNU_SHENG_PMGR: "0"
+          XNU_SOURCE_MOCKFS: "0"
           XNU_BOOT_PROGRESS: "0"
-          XNU_NATIVE_LEGACY_DISPLAY: "1"    # CONFIG_XNU_NATIVE_LEGACY_DISPLAY=y
-          XNU_NATIVE_ADRENO: "1"            # CONFIG_XNU_NATIVE_ADRENO=y
-          # n 的几项
-          XNU_NATIVE_MOBILE_DISPLAY: "0"    # CONFIG_XNU_NATIVE_MOBILE_DISPLAY=n
-          XNU_ARMVIRT_PLATFORM: "0"         # CONFIG_XNU_ARMVIRT_PLATFORM=n
           XNU_SMMU4K_PROBE: "0"
-          XNU_BUILD_WERROR: "0"
-          # 只在 config 里出现的字符串项
+          XNU_ADRENO_FIRMWARE_PROBE: "0"
+          XNU_ADRENO_PM4_PROBE: "0"
+          XNU_CONSTANT_UPLOADS_PROBE: "0"
+          XNU_NATIVE_CS_HASH_CACHE: "1"
+          XNU_NATIVE_ARCH_TIMER: "1"
+          XNU_NATIVE_PAN: "1"
+          XNU_DT_PANIC_REGION: "1"
+          XNU_TRUST_CACHE_RUNTIME: "1"
+          XNU_ZONE_PGZ_ALIGNMENT_PROBE: "1"
           XNU_CRYPTO_BOOTSTRAP: "prelinked"
-          XNU_OWNER_DATA_VOLUME_UUID: "18AB5557-DC2D-469B-8758-855E60F5B0DF"
-          XNU_NATIVE_VIRTIO_BLOCK_ARCHIVE: "{tree}/build/native-virtio-block-verified-bundle/libNativeVirtioBlock.a"
-          XNU_VERIFIED_ROOT_ARCHIVE: "{tree}/build/verified-root-os-xnu-bundle/libVerifiedRootProbe.a"
-          XNU_EXTRA_LD_ARCHIVES: ""
+          XNU_BUILD_WERROR: "0"
         run: |
           set -euo pipefail
           cd UniXNU
-          # 保留完整 trace：脚本内部有若干 `exit 1` 前置检查，失败时只打印
-          # 一行说明甚至什么都不打印，普通日志看不出停在哪一步。
           PS4='+ [$LINENO] '
-          bash -x scripts/build-xnu-4k-baseline.sh > build-xnu-trace.log 2>&1
-          rc=$?
-          echo "---- 退出码 $rc ----"
-          # 把 trace 的尾部也打出来，方便直接看
-          echo "===== trace 尾部 200 行 ====="
-          tail -200 build-xnu-trace.log
-          # build-xnu.log 是脚本内部 tee 的产物
-          [ -f build-xnu.log ] && cp build-xnu.log build-xnu-tail.log || true
-          exit $rc
+          if ! bash -x scripts/build-xnu-4k-baseline.sh > step1.log 2>&1; then
+            rc=$?
+            echo "===== 第 1 步失败，trace 尾部 ====="
+            tail -150 step1.log
+            cp step1.log "$GITHUB_WORKSPACE/step1.log"
+            exit $rc
+          fi
+          cp step1.log "$GITHUB_WORKSPACE/step1.log"
+          echo "第 1 步成功"
+          ls build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/ | head -20
+          find build/xnu/ios-obj -name "*.cpo.json" | head -5
 
-      - name: 列出产物
+      # ── 第 2 步：用设备仓库脚本编出 lib*.a ────────────────────
+      - name: 第 2 步 - 编设备 archive
+        run: |
+          set -uo pipefail
+          cd UniXNU
+          COMPS=(ArmDTPlatform ArmCpu NativeUfs NativeAES NativeVirtioBlock \
+                 NativeRamBlock NativeVirtioConsole NativeLegacyDisplay \
+                 NativeMobileDisplay NativeAdreno)
+          ok=""; bad=""
+          for c in "${COMPS[@]}"; do
+            echo "===== build-arm-driver.py $c ====="
+            if python3 scripts/build-arm-driver.py "$c" > "step2-$c.log" 2>&1; then
+              echo "OK   $c"; ok="$ok $c"
+            else
+              echo "FAIL $c"; tail -25 "step2-$c.log" || true; bad="$bad $c"
+            fi
+            cp "step2-$c.log" "$GITHUB_WORKSPACE/" 2>/dev/null || true
+          done
+          echo "---- 汇总 ----"
+          echo "成功:$ok"
+          echo "失败:${bad:- 无}"
+          echo "---- build/ 下的 .a ----"
+          find build -name "*.a" | head -40
+          [ -n "$ok" ] || { echo "一个 archive 都没编出来"; exit 1; }
+
+      - name: 产物检查
         if: always()
         run: |
           set -eux
-          cd UniXNU
-          echo "=== build/xnu 下的内核 ==="
-          find build -type f \( -name "mach.*" -o -name "kernel*" \) 2>/dev/null | head -40 || true
-          echo "=== ios-obj 目录 ==="
-          ls -la build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/ 2>/dev/null | head -40 || true
+          cd UniXNU || exit 0
+          echo "=== cpo.json ==="
+          find build/xnu/ios-obj -name "IOPlatformExpert.cpo.json" 2>/dev/null | head -3 || true
+          echo "=== 内核 ==="
+          find build/xnu -name "mach.development.bcm2837*" 2>/dev/null | head -10 || true
 
-      - name: 上传产物
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: xnu-macos-${{ github.run_number }}
-          path: |
-            UniXNU/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf
-            UniXNU/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped
-            UniXNU/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837
-            UniXNU/build-xnu.log
-            UniXNU/build-xnu-trace.log
-            UniXNU/build/xnu/ios-sym/**/*.dSYM/**
-          if-no-files-found: warn
-          retention-days: 14
-
-      - name: 上传日志（失败时也保留）
+      - name: 上传日志
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: xnu-macos-log-${{ github.run_number }}
           path: |
-            UniXNU/build-xnu.log
-            UniXNU/build-xnu-trace.log
+            step1.log
+            step2-*.log
+            UniXNU/step1.log
+            UniXNU/step2-*.log
           if-no-files-found: warn
           retention-days: 7
