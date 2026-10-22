@@ -164,13 +164,18 @@ jobs:
           UNIXNU_XNU_DARWIN: ${{ github.event.inputs.xnu_darwin || '23.6.0' }}
           UNIXNU_XNU_VERSION: ${{ github.event.inputs.xnu_version || '10063.141.1' }}
           JOBS: "6"
-          XNU_SOURCE_CORECRYPTO14: "0"
-          XNU_SOURCE_PTHREAD: "0"
-          XNU_ARM_DT_PLATFORM: "0"
+          # 对齐 hanzi123-bilp/unixnu-fuxi 的 configs/fuxi_defconfig。
+          # 第 1 步只要自洽就行（NATIVE_ARCH_TIMER=1 必须配 ARMCPU=1，
+          # 否则 build-xnu-4k-baseline.sh L509 直接 exit 1），
+          # 但 fuxi_defconfig 里 CONFIG_XNU_ARMCPU=y 且 CONFIG_XNU_NATIVE_UFS=y，
+          # 所以下面按 defconfig 全开。
+          XNU_SOURCE_CORECRYPTO14: "1"
+          XNU_SOURCE_PTHREAD: "1"
+          XNU_ARM_DT_PLATFORM: "1"
           XNU_ARMVIRT_PLATFORM: "0"
-          XNU_ARMCPU: "0"
-          XNU_NATIVE_UFS: "0"
-          XNU_NATIVE_AES: "0"
+          XNU_ARMCPU: "1"
+          XNU_NATIVE_UFS: "1"
+          XNU_NATIVE_AES: "1"
           XNU_NATIVE_VIRTIO_BLOCK: "0"
           XNU_NATIVE_RAM_BLOCK: "0"
           XNU_NATIVE_VIRTIO_CONSOLE: "0"
@@ -183,7 +188,7 @@ jobs:
           XNU_OWNER_ROOT_TRUST: "0"
           XNU_SHENG_PMGR: "0"
           XNU_SOURCE_MOCKFS: "0"
-          XNU_BOOT_PROGRESS: "0"
+          XNU_BOOT_PROGRESS: "1"
           XNU_SMMU4K_PROBE: "0"
           XNU_ADRENO_FIRMWARE_PROBE: "0"
           XNU_ADRENO_PM4_PROBE: "0"
