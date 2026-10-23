@@ -91,9 +91,14 @@ jobs:
           cp -a "$SHENG/scripts/." UniXNU/scripts/
 
           # kits/NativePrelink 的两个补丁对 xnu-10063.141.1 的 OSKext.cpp 打不上
-          # （security-init.patch / sparse-index.patch）。它们是预链接 kext 的
-          # 支持补丁，启动本身不需要；先摘掉，让官方的基线脚本能跑完。
-          rm -f UniXNU/kits/NativePrelink/patches/xnu-10063.141.1-*.patch
+          # （security-init.patch / sparse-index.patch），它们是预链接 kext 的支持
+          # 补丁，启动本身不需要。
+          # 注意：光删文件不行——脚本第 43 行的 for 循环会保留字面量 glob，
+          # git apply 会报 "can't open patch ... *.patch"。所以直接把那一行里
+          # 第二个 glob 去掉，只保留 patches/xnu。
+          sed -i '' 's# "$ROOT"/kits/NativePrelink/patches/\*.patch##' UniXNU/scripts/build-xnu-4k-baseline.sh
+          echo "--- 第 43 行现在是 ---"
+          sed -n '43p' UniXNU/scripts/build-xnu-4k-baseline.sh
 
           test -f UniXNU/scripts/build-xnu-4k-baseline.sh
           test -f UniXNU/scripts/build-arm-driver.py
