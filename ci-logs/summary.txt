@@ -1,0 +1,21 @@
+kernel:
+  MISSING
+
+sha256:
+  n/a
+
+flags:
+  IOS:       1121
+  OSX:       0
+0
+  iphoneos:  1068
+
+error count: 18
+
+first errors:
+[33;01m[warning] [39;49;00mSkipping patch /Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/patches/0018-fuxi-boot-cpu-driver.patch (already upstream, previously applied, or malformed): error: patch failed: iokit/KernelConfigTables.cpp:41
+error: iokit/KernelConfigTables.cpp: patch does not apply
+error: patch failed: iokit/conf/files.arm64:8
+error: iokit/conf/files.arm64: patch does not apply
+[33;01m[warning] [39;49;00mSkipping patch /Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/patches/TrustCache.patch (already upstream, previously applied, or malformed): error: EXTERNAL_HEADERS/TrustCache/API.h: already exists in working directory
+error: EXTERNAL_HEADERS/TrustCache/RawTypes.h: already exists in working directory
