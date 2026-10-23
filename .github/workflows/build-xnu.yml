@@ -34,7 +34,12 @@ env:
   DXB_SHA: 663906528d1cd5ea8fde7de6f16de73db9511549
   MACOS_VERSION: "13.5"
   KERNEL_CONFIG: ${{ inputs.kernel_config || 'DEVELOPMENT' }}
-  MACHINE_CONFIG: ${{ inputs.machine_config || 'BCM2837' }}
+  # 我们的补丁集（FUXI.h、sleh.c 的 GICv3 处理、fbcon、boot trace）都是
+  # 按 MACHINE_CONFIG=FUXI 写的。DXB 默认 VMAPPLE，本 workflow 之前用
+  # BCM2837，结果 caches_asm.s（conf/files.arm64 里标着 optional nos_arm_asm）
+  # 那种平台层文件没被编进来，链接时 CleanPoC_Dcache / Idle_context /
+  # __bcopyin 这些全成了 undefined。
+  MACHINE_CONFIG: ${{ inputs.machine_config || 'FUXI' }}
 
 jobs:
   build:
@@ -52,13 +57,10 @@ jobs:
           mkdir -p dxb/patches
           cp xnu/patches/*.patch xnu/patches/*.sh dxb/patches/ 2>/dev/null || cp xnu/patches/*.patch dxb/patches/
           # libfirehose_kernel 只出 arm64e，而我们的内核是普通 arm64
-          # 只编 arm64。arm64e 会让 __has_feature(ptrauth_calls) 为真，XNU 于是
-          # 编进 Apple 专有的 JOP 代码（pmap->disable_jop、task->jop_pid、
-          # pmap_sign_user_ptr），而这些字段在 HAS_APPLE_PAC=0 的板上不存在：
-          #   vm_shared_region.c: no member named 'disable_jop' in 'struct pmap'
-          # 之前那句 sed 只是把 arm64 追加进 ARCHS，arm64e 仍然会被编。
-          sed -i '' 's/ARCHS="x86_64 arm64e" VALID_ARCHS="x86_64 arm64e"/ARCHS="arm64" VALID_ARCHS="arm64"/' dxb/build.sh
-          grep -c 'VALID_ARCHS="arm64"' dxb/build.sh
+          # 不要再 sed build.sh 的 ARCHS：那一行是 libfirehose_kernel 用的
+          # （它只出 arm64e）。内核自己的 -arch 由下面构建步骤的
+          # ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG=arm64 决定。
+          grep -n 'MACHINE_CONFIG:=' dxb/build.sh | head -3
           ls dxb/patches
 
       - name: 依赖
