@@ -1,11 +1,26 @@
 diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 --- a/osfmk/arm64/start.s
 +++ b/osfmk/arm64/start.s
-@@ -901,2 +901,31 @@
+@@ -901,2 +901,62 @@
  
-+	/* 0057: record the MMU inputs before enabling it. The L2 read is guarded:
-+	 * if the L1 entry is empty (mapping never built) x8 is 0 and reading
-+	 * [x8 + x9] would fault before the MMU is even on. */
++	/* 0057 bar A @ y=1000: proves execution got here */
++	MOV64	x0, (0xB8000000 + 1000 * 4320)
++	mov	w1, #-1
++	mov	x2, #24
++	mov	x4, #4320
++Lfuxi_dumpbarA_row:
++	mov	x3, #200
++	mov	x5, x0
++Lfuxi_dumpbarA_pixel:
++	str	w1, [x5], #4
++	subs	x3, x3, #1
++	b.ne	Lfuxi_dumpbarA_pixel
++	add	x0, x0, x4
++	subs	x2, x2, #1
++	b.ne	Lfuxi_dumpbarA_row
++	dsb	sy
++	/* 0057: record the MMU inputs. Guarded: if the L1 entry holds no L2
++	 * table, x8 is 0 and reading [x8 + x9] would fault before the MMU is on. */
 +	adr	x5, .
 +	lsr	x6, x5, #30
 +	and	x6, x6, #0x1FF
@@ -31,5 +46,21 @@ diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 +	mrs	x1, SCTLR_EL1
 +	stp	x1, x7, [x0, #48]
 +	stp	x10, x5, [x0, #64]
++	dsb	sy
++	/* 0057 bar B @ y=960: proves execution got here */
++	MOV64	x0, (0xB8000000 + 960 * 4320)
++	mov	w1, #-1
++	mov	x2, #24
++	mov	x4, #4320
++Lfuxi_dumpbarB_row:
++	mov	x3, #200
++	mov	x5, x0
++Lfuxi_dumpbarB_pixel:
++	str	w1, [x5], #4
++	subs	x3, x3, #1
++	b.ne	Lfuxi_dumpbarB_pixel
++	add	x0, x0, x4
++	subs	x2, x2, #1
++	b.ne	Lfuxi_dumpbarB_row
 +	dsb	sy
  	MOV64   x0, SCTLR_EL1_DEFAULT
