@@ -76,8 +76,11 @@ jobs:
           ls -la
           echo "--- vendor ---"
           ls -la vendor/ || { echo "没有 vendor 目录"; exit 1; }
-          tar -xzf vendor/UniXNU-full.tar.gz -C .
-          ls UniXNU/ || { echo "UniXNU 解包失败"; exit 1; }
+          # vendor/UniXNU-full.tar.gz 里的文件是顶层存放的（没有 UniXNU/ 前缀），
+          # 直接解到当前目录会散成一地，所以先建目录再解进去。
+          mkdir -p UniXNU
+          tar -xzf vendor/UniXNU-full.tar.gz -C UniXNU
+          ls UniXNU/scripts >/dev/null || { echo "UniXNU 解包失败"; ls -la UniXNU | head -20; exit 1; }
           mkdir -p _sheng
           tar -xzf vendor/UniXNU-sheng-full.tar.gz -C _sheng
           SHENG=_sheng/UniXNU-sheng
