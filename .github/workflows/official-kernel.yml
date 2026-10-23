@@ -1,0 +1,123 @@
+name: official-kernel
+
+# 严格按 UniXNU 官方教程编 fuxi 内核：
+#   ./unixnu defconfig fuxi_defconfig
+#   ./unixnu fetch
+#   ./unixnu build kernel
+#
+# 官方文档（https://unixnu.com/devices/fuxi）指定的 fuxi 设备仓库是
+# hanzi123-bilp/unixnu-fuxi；驱动仓库是 UniXNU/UniXNU。两者都在这里检出，
+# 不再自己拼 build-xnu-4k-baseline.sh。
+
+on:
+  push:
+    paths:
+      - ".github/workflows/official-kernel.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: official-kernel-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: "1"
+  HOMEBREW_NO_INSTALL_CLEANUP: "1"
+  HOMEBREW_NO_ENV_HINTS: "1"
+  DEFCONFIG: fuxi_defconfig
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 360
+    env:
+      UNIXNU_DEVICE: ${{ github.workspace }}/device
+    steps:
+      - name: 取 UniXNU（驱动仓库）
+        uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU
+          path: unixnu
+          persist-credentials: false
+
+      - name: 取设备仓库（官方指定的 fuxi 端口）
+        uses: actions/checkout@v4
+        with:
+          repository: hanzi123-bilp/unixnu-fuxi
+          path: device
+          persist-credentials: false
+
+      - name: 装依赖
+        run: |
+          brew install llvm lld mtools dtc unifdef || true
+          if ! command -v unifdef >/dev/null; then
+            echo "$(brew --prefix unifdef)/bin" >> "$GITHUB_PATH"
+          fi
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+
+      - name: 报告工具链
+        run: |
+          sw_vers
+          uname -m
+          xcodebuild -version || true
+          for t in git make clang cmake ninja unifdef ld.lld mformat mcopy dtc; do
+            printf '%-10s %s\n' "$t" "$(command -v "$t" || echo MISSING)"
+          done
+
+      - name: 选择设备
+        working-directory: unixnu
+        run: |
+          ./unixnu defconfig "$DEFCONFIG"
+
+      - name: 拉源码
+        working-directory: unixnu
+        run: |
+          ./unixnu fetch
+
+      - name: 编内核（官方 unixnu build kernel）
+        working-directory: unixnu
+        run: |
+          set -o pipefail
+          ./unixnu build kernel 2>&1 | tee build-kernel.log
+
+      - name: 列出内核产物
+        if: always()
+        working-directory: unixnu
+        run: |
+          echo "===== mach.* ====="
+          find . -name 'mach.*' -maxdepth 8 2>/dev/null | head -20 || true
+          echo "===== kernel* ====="
+          find . -name 'kernel*' -maxdepth 8 -size +1M 2>/dev/null | head -20 || true
+
+      - name: 上传内核
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuxi-kernel-official
+          path: |
+            unixnu/build/**
+            unixnu/build-kernel.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: 失败时把日志推到 ci-logs 分支
+        if: failure()
+        run: |
+          set +e
+          mkdir -p ci-logs-official
+          cp unixnu/build-kernel.log ci-logs-official/ 2>/dev/null || true
+          if [ -f unixnu/build-kernel.log ]; then
+            tail -120 unixnu/build-kernel.log > ci-logs-official/tail.log
+          fi
+          git config user.name "xnu-bot"
+          git config user.email "xnu-bot@users.noreply.github.com"
+          git checkout --orphan ci-logs-official-tmp 2>/dev/null || true
+          git add -f ci-logs-official 2>/dev/null || true
+          git commit -qm "official kernel log" 2>/dev/null || true
+          git push -f origin HEAD:ci-logs 2>/dev/null || echo "log push failed"
