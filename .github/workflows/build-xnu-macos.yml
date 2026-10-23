@@ -20,6 +20,7 @@ on:
       - ".github/workflows/build-xnu-macos.yml"
       - "vendor/UniXNU-full.tar.gz"
       - "vendor/UniXNU-sheng-full.tar.gz"
+      - "xnu/patches/**"
   workflow_dispatch:
     inputs:
       xnu_tag:

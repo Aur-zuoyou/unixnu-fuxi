@@ -1,4 +1,3 @@
-# uniXNU 引导配置：内核和 ADT 都在同一个 FAT 镜像里
 version = 1
 
 [boot]
@@ -7,23 +6,15 @@ rotate = 0
 default = "xnu"
 
 [ui]
-title = "UniXNU - fuxi"
+title = "iOS on Xiaomi 13"
 logo = true
-console = "auto"
 
 [[entry]]
 id = "xnu"
 title = "iOS on Xiaomi 13"
 type = "xnu"
 path = "\\kernel"
-dtb = "\\fuxi.adt"
 args = "-v serial=3 debug=0x8"
-
-[[entry]]
-id = "reset"
-title = "Restart"
-type = "action"
-action = "reset"
 
 [[entry]]
 id = "shutdown"

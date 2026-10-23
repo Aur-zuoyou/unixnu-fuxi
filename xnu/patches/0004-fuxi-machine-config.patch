@@ -345,7 +345,16 @@ index 0000000..a044ad0
 +#define __ARM_ENABLE_SWAP__       1
 +#define __ARM_V8_CRYPTO_EXTENSIONS__ 1
 +#define __ARM_PAN_AVAILABLE__     1
-+#define __ARM_16K_PG__            1
++/*
++ * No __ARM_16K_PG__ here. This SoC reports TGran16 = 1 in
++ * ID_AA64MMFR0_EL1, i.e. the 16 KiB granule is not implemented: building
++ * the kernel for 16K makes the bootstrap page tables and the TCR in
++ * sysreg_restore ask for a granule the MMU cannot use, so the very first
++ * MMU enable takes an instruction abort in start.s and lands in
++ * LowExceptionVectorBase (a bare "b ."), which looks like a silent hang.
++ * Building for 4K (the default when __ARM_16K_PG__ is undefined) keeps
++ * TG0/TG1 at 4 KiB, which this core does implement.
++ */
 +
 +#define HAS_GIC_V3                1
 +
