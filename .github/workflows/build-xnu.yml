@@ -141,7 +141,14 @@ jobs:
             echo "  OSX:       $(grep -c -- '-DXNU_TARGET_OS_OSX' build.log 2>/dev/null || echo 0)"
             echo "  iphoneos:  $(grep -c -- '-DXNU_PLATFORM_iphoneos' build.log 2>/dev/null || echo 0)"
             echo; echo "error count: $(grep -c 'error:' build.log 2>/dev/null || echo 0)"
-            echo; echo "first errors:"; grep -m 6 'error:' build.log 2>/dev/null || true
+            echo; echo "compile/link errors:"
+            grep -E '\.(c|cpp|m|s|h):[0-9]+:[0-9]+: (error|fatal error):' build.log 2>/dev/null | head -10 || true
+            echo; echo "ld errors:"
+            grep -E '^(ld|clang\+\+): error|Undefined symbols' build.log 2>/dev/null | head -6 || true
+            echo; echo "no such file:"
+            grep -m 6 'fatal error: .*file not found' build.log 2>/dev/null || true
+            echo; echo "tail:"
+            tail -12 build.log 2>/dev/null || true
           } > ci-logs/summary.txt
           { echo '=== 错误摘要 ==='; grep -nE '(^|[[:space:]])error:|Premature EOF|Parse failure' build.log 2>/dev/null | head -120 || true; } >> ci-logs/out-listing.txt
           git config user.name "xnu-bot"
