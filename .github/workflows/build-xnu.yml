@@ -100,6 +100,28 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+      - name: 把构建日志提交回仓库（失败时也能看到原因）
+        if: always()
+        continue-on-error: true
+        run: |
+          set -e
+          mkdir -p ci-logs
+          cp build.log ci-logs/build.log 2>/dev/null || echo 'no build.log' > ci-logs/build.log
+          { echo '=== out/ ==='; ls -la out 2>&1 || true; } > ci-logs/out-listing.txt
+          { echo '=== 错误摘要 ==='; grep -nE '(^|[[:space:]])error:|Premature EOF|Parse failure' build.log 2>/dev/null | head -120 || true; } >> ci-logs/out-listing.txt
+          git config user.name "xnu-bot"
+          git config user.email "xnu-bot@users.noreply.github.com"
+          git add ci-logs
+          if git diff --cached --quiet; then echo "log unchanged"; exit 0; fi
+          git commit -m "ci: build log $(date -u +%Y-%m-%dT%H:%MZ)"
+          for i in 1 2 3 4 5; do
+            git fetch origin main || true
+            if ! git rebase origin/main; then git rebase --abort || true; sleep 3; continue; fi
+            if git push origin HEAD:main; then echo "log pushed (attempt $i)"; exit 0; fi
+            sleep 5
+          done
+          echo "::warning::log push failed"
+
       - name: commit kernel back to repo (firmware build uses same binary)
         if: success()
         continue-on-error: true

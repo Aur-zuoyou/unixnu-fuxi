@@ -316,13 +316,13 @@ new file mode 100644
 index 0000000..a044ad0
 --- /dev/null
 +++ b/pexpert/pexpert/arm64/FUXI.h
-@@ -0,0 +1,75 @@
+@@ -0,0 +1,84 @@
 +/*
 + * Board config for the Redmi Note 10 Pro ("fuxi", Qualcomm SM7150 /
 + * Snapdragon 732G): Kryo 470 = Cortex-A76 + Cortex-A55, ARMv8.2, no PAC.
 + *
 + * Generic ARM like BCM2837 (no APPLE_ARM64_ARCH_FAMILY: none of Apple's
-+ * implementation-defined system registers exist), 16K pages and GICv3 like
++ * implementation-defined system registers exist), 4K pages and GICv3 like
 + * VMAPPLE. Unlike VMAPPLE the GIC has two security states (GICD_TYPER
 + * SecurityExtn=1): Group 0 belongs to TrustZone, so every interrupt,
 + * including the timer, is a Group 1 IRQ taken through sleh_irq().
