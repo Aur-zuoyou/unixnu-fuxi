@@ -77,6 +77,18 @@ jobs:
         working-directory: dxb
         env:
           MAKEFLAGS: "-k"
+          # makedefs/MakeInc.def 里：
+          #   ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG := $(shell echo $(CURRENT_ARCH_CONFIG) | tr A-Z a-z)
+          #   ifneq ($(filter arm64,$(ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG)),)
+          #     export ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG := arm64e
+          #   endif
+          # 任何 ARM64 都会变成 arm64e，而 ARCH_FLAGS_ARM64 直接等于
+          # -arch $(ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG)。arm64e 让
+          # __has_feature(ptrauth_calls) 为真，XNU 就编进 Apple 专有的 JOP
+          # 代码（pmap->disable_jop / task->jop_pid / pmap_sign_user_ptr），
+          # 而 HAS_APPLE_PAC=0 的板上这些字段根本不存在，编译必然失败。
+          # 这个变量第一次赋值是 ?=，所以从环境里预设成 arm64 就能绕过。
+          ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG: "arm64"
         run: |
           set +e
           bash build.sh > ../build.log 2>&1
