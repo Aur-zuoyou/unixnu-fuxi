@@ -1,5 +1,7 @@
 name: build-xnu
 
+# 0055 诊断版：开 MMU 前保留物理地址低向量，异常才能上报。
+
 # 用 blacktop/darwin-xnu-build 构建开源 XNU，并打上 fuxi 板级补丁序列。
 #
 # 路线参考：dipa-studio/ios-sweet（他们把 xnu-8796 移植到骁龙 732G 并跑起 iOS 16 用户态）。
