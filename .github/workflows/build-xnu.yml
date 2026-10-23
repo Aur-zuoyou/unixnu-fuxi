@@ -133,6 +133,16 @@ jobs:
           mkdir -p ci-logs
           cp build.log ci-logs/build.log 2>/dev/null || echo 'no build.log' > ci-logs/build.log
           { echo '=== out/ ==='; ls -la out 2>&1 || true; } > ci-logs/out-listing.txt
+          {
+            echo "kernel:"; ls -la out/kernel.development.fuxi 2>/dev/null || echo "  MISSING"
+            echo; echo "sha256:"; (cd out 2>/dev/null && shasum -a 256 kernel.development.fuxi) 2>/dev/null || echo "  n/a"
+            echo; echo "flags:"
+            echo "  IOS:       $(grep -c -- '-DXNU_TARGET_OS_IOS' build.log 2>/dev/null || echo 0)"
+            echo "  OSX:       $(grep -c -- '-DXNU_TARGET_OS_OSX' build.log 2>/dev/null || echo 0)"
+            echo "  iphoneos:  $(grep -c -- '-DXNU_PLATFORM_iphoneos' build.log 2>/dev/null || echo 0)"
+            echo; echo "error count: $(grep -c 'error:' build.log 2>/dev/null || echo 0)"
+            echo; echo "first errors:"; grep -m 6 'error:' build.log 2>/dev/null || true
+          } > ci-logs/summary.txt
           { echo '=== 错误摘要 ==='; grep -nE '(^|[[:space:]])error:|Premature EOF|Parse failure' build.log 2>/dev/null | head -120 || true; } >> ci-logs/out-listing.txt
           git config user.name "xnu-bot"
           git config user.email "xnu-bot@users.noreply.github.com"
