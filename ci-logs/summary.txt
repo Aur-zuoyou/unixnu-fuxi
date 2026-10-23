@@ -5,17 +5,32 @@ sha256:
   n/a
 
 flags:
-  IOS:       1121
+  IOS:       1120
   OSX:       0
 0
-  iphoneos:  1068
+  iphoneos:  1067
 
 error count: 18
 
-first errors:
-[33;01m[warning] [39;49;00mSkipping patch /Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/patches/0018-fuxi-boot-cpu-driver.patch (already upstream, previously applied, or malformed): error: patch failed: iokit/KernelConfigTables.cpp:41
-error: iokit/KernelConfigTables.cpp: patch does not apply
-error: patch failed: iokit/conf/files.arm64:8
-error: iokit/conf/files.arm64: patch does not apply
-[33;01m[warning] [39;49;00mSkipping patch /Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/patches/TrustCache.patch (already upstream, previously applied, or malformed): error: EXTERNAL_HEADERS/TrustCache/API.h: already exists in working directory
-error: EXTERNAL_HEADERS/TrustCache/RawTypes.h: already exists in working directory
+compile/link errors:
+/Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/xnu/osfmk/vm/vm_compressor.c:3226:6: error: use of undeclared identifier 'memorystatus_swap_all_apps'
+/Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/xnu/osfmk/vm/vm_compressor.c:4143:8: error: use of undeclared identifier 'memorystatus_swap_all_apps'
+/Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/xnu/bsd/vm/vm_unix.c:1769:20: error: incomplete definition of type 'struct pid_hibernate_args'
+
+ld errors:
+
+no such file:
+
+tail:
+make[7]: Target `do_build_all' not remade because of errors.
+make[6]: *** [build_all] Error 2
+make[5]: *** [do_all] Error 2
+make[5]: Target `do_build_all' not remade because of errors.
+make[4]: *** [build_all] Error 2
+make[3]: *** [build_all_recurse_into_conf] Error 2
+make[3]: Target `build_all' not remade because of errors.
+make[2]: *** [build_all_recurse_into_bsd] Error 2
+make[2]: Target `build_all' not remade because of errors.
+make[1]: *** [build_all_bootstrap_DEVELOPMENT^ARM64^FUXI] Error 2
+make[1]: Target `install' not remade because of errors.
+make: *** [install] Error 2
