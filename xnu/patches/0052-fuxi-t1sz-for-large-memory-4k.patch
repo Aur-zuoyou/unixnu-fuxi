@@ -1,0 +1,22 @@
+diff --git a/osfmk/arm64/proc_reg.h b/osfmk/arm64/proc_reg.h
+--- a/osfmk/arm64/proc_reg.h
++++ b/osfmk/arm64/proc_reg.h
+@@ -976,3 +976,18 @@
+ #endif /* __ARM_16K_PG__ */
+ #endif /* defined(APPLE_ARM64_ARCH_FAMILY) */
++
++/*
++ * fuxi 0052: with ARM_LARGE_MEMORY (always set for the macOS platform, which
++ * is the SDK this kernel is built against) the kernel lives at
++ * 0xfffffe0000000000, i.e. -2TB. That only fits in a 47-bit TTBR1 range.
++ * The ladder above yields T1SZ_BOOT=25 (39 bits) for 4 KiB pages, which
++ * cannot reach it: the first kernel virtual address used after the MMU
++ * comes on takes a translation fault and the boot restarts through vector 0.
++ * Apple pairs ARM_LARGE_MEMORY with 16 KiB pages, where the ladder already
++ * yields 17; pin it so 4 KiB pages work with the same address space.
++ */
++#if defined(ARM_LARGE_MEMORY) && (T1SZ_BOOT != 17)
++#undef T1SZ_BOOT
++#define T1SZ_BOOT 17ULL
++#endif
+ 
