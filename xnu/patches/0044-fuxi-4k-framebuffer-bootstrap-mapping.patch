@@ -1,0 +1,29 @@
+diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
+--- a/osfmk/arm64/start.s
++++ b/osfmk/arm64/start.s
+@@ -610,6 +610,25 @@
+ 	/* Setup the KVA bootstrap mapping */
+ 	lsr		x5,  x24, #(ARM_TT_L2_SHIFT)
+ 	create_bootstrap_mapping x14, x15, x5, x3, x2, x9, x10, x11, x12, x13
++
++#if defined(ARM64_BOARD_CONFIG_FUXI) && !__ARM_16K_PG__
++	/*
++	 * 4 KiB pages: the framebuffer sits in L1 index 2 while the kernel sits
++	 * in L1 index 3 (0xB8000000 >> 30 vs 0xC4104000 >> 30), so it cannot
++	 * share the V=P L2 table. With 16 KiB pages both fall under L1 index 0
++	 * and the single-entry hack in the FUXI block above works; with 4 KiB
++	 * pages the framebuffer would stay unmapped and the first early-console
++	 * write would take a translation fault.
++	 *
++	 * Give it its own L1 entry and L2 table; x2 is the free pointer left
++	 * after the two mappings above (BOOTSTRAP_TABLE_SIZE is 8 pages).
++	 */
++	MOV64	x0, 0xB8000000
++	MOV64	x4, 0xB8000000
++	mov	x5, #(0x02000000 >> ARM_TT_L2_SHIFT)
++	mov	x3, x25
++	create_bootstrap_mapping x0, x4, x5, x3, x2, x6, x9, x10, x11, x12
++#endif /* ARM64_BOARD_CONFIG_FUXI && !__ARM_16K_PG__ */
+ 
+ 	/* Ensure TTEs are visible */
+ 	dsb		ish
