@@ -5,29 +5,33 @@ sha256:
   n/a
 
 flags:
-  IOS:       1129
+  IOS:       0
+0
   OSX:       0
 0
-  iphoneos:  1074
+  iphoneos:  0
+0
 
 error count: 16
 
 compile/link errors:
+/Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/fakeroot/System/Library/Frameworks/Kernel.framework/PrivateHeaders/mach/arm/vm_types.h:76:10: fatal error: 'Availability.h' file not found
 
 ld errors:
 
 no such file:
+/Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/fakeroot/System/Library/Frameworks/Kernel.framework/PrivateHeaders/mach/arm/vm_types.h:76:10: fatal error: 'Availability.h' file not found
 
 tail:
-/bin/cat /Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/build/xnu.obj/DEVELOPMENT_ARM64_FUXI//osfmk/DEVELOPMENT/osfmk.filelist /Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/build/xnu.obj/DEVELOPMENT_ARM64_FUXI//bsd/DEVELOPMENT/bsd.filelist /Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/build/xnu.obj/DEVELOPMENT_ARM64_FUXI//libkern/DEVELOPMENT/libkern.filelist /Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/build/xnu.obj/DEVELOPMENT_ARM64_FUXI//iokit/DEVELOPMENT/iokit.filelist /Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/build/xnu.obj/DEVELOPMENT_ARM64_FUXI//pexpert/DEVELOPMENT/pexpert.filelist /Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/build/xnu.obj/DEVELOPMENT_ARM64_FUXI//libsa/DEVELOPMENT/libsa.filelist /Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/build/xnu.obj/DEVELOPMENT_ARM64_FUXI//security/DEVELOPMENT/security.filelist /Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/build/xnu.obj/DEVELOPMENT_ARM64_FUXI//san/DEVELOPMENT/san.filelist < /dev/null > link.filelist
-/Applications/Xcode_15.0.1.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++ -nostdlib -nostdlib -fapple-kext -Wl,-e,__start -Wl,-sectalign,__TEXT,__text,0x1000 -Wl,-sectalign,__DATA,__common,0x1000 -Wl,-sectalign,__DATA,__bss,0x1000 -Wl,-sectcreate,__PRELINK_TEXT,__text,/dev/null -Wl,-segprot,__PRELINK_TEXT,r-x,r-x -Wl,-sectcreate,__PRELINK_INFO,__info,/dev/null -Wl,-new_linker -Wl,-pagezero_size,0x0 -Wl,-version_load_command -Wl,-function_starts -Wl,-headerpad,152 -L/Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/fakeroot/usr/local/lib/kernel -lfirehose_kernel -arch arm64   -Wl,-pie -Wl,-static -Wl,-segaddr,__PRELINK_TEXT,0xfffffff004004000 -Wl,-image_base,0xfffffff007004000 -Wl,-rename_section,__HIB,__text,__TEXT_EXEC,__hib_text -Wl,-rename_section,__HIB,__const,__DATA_CONST,__hib_const -Wl,-rename_section,__HIB,__cstring,__DATA_CONST,__hib_const -Wl,-rename_section,__HIB,__literal8,__DATA_CONST,__hib_const -Wl,-rename_section,__HIB,__literal16,__DATA_CONST,__hib_const -Wl,-rename_segment,__HIB,__HIBDATA -Wl,-sectalign,__DATA,__const,0x4000 -Wl,-sectalign,__DATA,__percpu,0x4000 -Wl,-sectalign,__DATA,__data,0x4000 -Wl,-rename_section,__DATA,__mod_init_func,__DATA_CONST,__mod_init_func -Wl,-rename_section,__DATA,__mod_term_func,__DATA_CONST,__mod_term_func -Wl,-rename_section,__DATA,__auth_ptr,__DATA_CONST,__auth_ptr -Wl,-rename_section,__DATA,__auth_got,__DATA_CONST,__auth_got -Wl,-rename_section,__DATA,__const,__DATA_CONST,__const -Wl,-segprot,__DATA_CONST,r--,r-- -Wl,-rename_section,__KLD,__const,__KLDDATA,__const -Wl,-rename_section,__KLD,__cstring,__KLDDATA,__cstring -Wl,-segprot,__KLDDATA,rw-,rw- -Wl,-segprot,__KLD,r-x,r-x -Wl,-rename_section,__TEXT,__text,__TEXT_EXEC,__text -Wl,-rename_section,__TEXT,__stubs,__TEXT_EXEC,__stubs -Wl,-sectcreate,"__PLK_TEXT_EXEC",__text,/dev/null -Wl,-sectcreate,__PRELINK_DATA,__data,/dev/null -Wl,-sectcreate,"__PLK_DATA_CONST",__data,/dev/null -Wl,-sectcreate,"__PLK_LLVM_COV",__llvm_covmap,/dev/null -Wl,-sectcreate,"__PLK_LINKEDIT",__data,/dev/null -Wl,-rename_section,__PPLDATA,__const,__PPLDATA_CONST,__const -Wl,-segment_order,__TEXT:__DATA_CONST:__LINKEDIT:__TEXT_EXEC:__TEXT_BOOT_EXEC:__KLD:__PPLTEXT:__PPLTRAMP:__PPLDATA_CONST:__LASTDATA_CONST:__LAST:__PPLDATA:__KLDDATA:__DATA:__HIBDATA:__BOOTDATA -Wl,-segprot,__TEXT,r--,r-- -Wl,-segprot,__TEXT_EXEC,r-x,r-x -Wl,-segprot,__TEXT_BOOT_EXEC,r-x,r-x -Wl,-segprot,__PPLTEXT,r-x,r-x -Wl,-segprot,__PPLTRAMP,r-x,r-x -Wl,-segprot,__PPLDATA_CONST,r--,r-- -Wl,-segprot,__LASTDATA_CONST,r--,r-- -Wl,-segprot,__LAST,r-x,r-x   -miphoneos-version-min=17.0 -DXNU_TARGET_OS_IOS   -Wl,-alias_list,/Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/build/xnu.obj/DEVELOPMENT_ARM64_FUXI//all-alias.exp -Wl,-sectcreate,__LINKINFO,__symbolsets,/Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/build/xnu.obj/DEVELOPMENT_ARM64_FUXI//symbolsets.plist -Wl,-segprot,__LINKINFO,r--,r-- -filelist link.filelist version.o lastkerneldataconst.o lastkernelconstructor.o nonlto.o -o /Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/build/xnu.obj/DEVELOPMENT_ARM64_FUXI//kernel.development.fuxi.unstripped -lcc_kext -L/Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/fakeroot/usr/local/lib/kernel -lfirehose_kernel -lfirehose_kernel
-ld: warning: -rename_segment not yet supported
-ld: in /Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/fakeroot/usr/local/lib/kernel/libfirehose_kernel.a(firehose_buffer.o), building for iOS, but linking in object file built for macOS, file '/Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/fakeroot/usr/local/lib/kernel/libfirehose_kernel.a' for architecture arm64
-clang: error: linker command failed with exit code 1 (use -v to see invocation)
-make[3]: *** [/Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/build/xnu.obj/DEVELOPMENT_ARM64_FUXI//kernel.development.fuxi.unstripped] Error 1
-make[3]: Target `do_build_all' not remade because of errors.
-make[3]: Target `do_build_all' not remade because of errors.
-make[2]: *** [build_all] Error 2
-make[1]: *** [build_all_bootstrap_DEVELOPMENT^ARM64^FUXI] Error 2
-make[1]: Target `install' not remade because of errors.
-make: *** [install] Error 2
+/Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/fakeroot/System/Library/Frameworks/Kernel.framework/PrivateHeaders/mach/arm/vm_types.h:76:10: fatal error: 'Availability.h' file not found
+#include <Availability.h>
+         ^~~~~~~~~~~~~~~~
+1 error generated.
+
+warning: Traditional headermap style is no longer supported; please migrate to using separate headermaps and set 'ALWAYS_SEARCH_USER_PATHS' to NO. (in target 'libfirehose_kernel' from project 'libdispatch')
+** INSTALL FAILED **
+
+
+The following build commands failed:
+	CompileC /Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/build/libfirehose_kernel.obj/libdispatch.build/Release-iphoneos/libfirehose_kernel.build/Objects-normal/arm64/firehose_buffer.o /Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/libdispatch/src/firehose/firehose_buffer.c normal arm64 c com.apple.compilers.llvm.clang.1_0.compiler (in target 'libfirehose_kernel' from project 'libdispatch')
+(1 failure)
