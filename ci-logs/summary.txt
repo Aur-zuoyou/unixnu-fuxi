@@ -5,32 +5,29 @@ sha256:
   n/a
 
 flags:
-  IOS:       1120
+  IOS:       1055
   OSX:       0
 0
-  iphoneos:  1067
+  iphoneos:  1011
 
-error count: 18
+error count: 15
 
 compile/link errors:
-/Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/xnu/osfmk/vm/vm_compressor.c:3226:6: error: use of undeclared identifier 'memorystatus_swap_all_apps'
-/Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/xnu/osfmk/vm/vm_compressor.c:4143:8: error: use of undeclared identifier 'memorystatus_swap_all_apps'
-/Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/xnu/bsd/vm/vm_unix.c:1769:20: error: incomplete definition of type 'struct pid_hibernate_args'
 
 ld errors:
 
 no such file:
 
 tail:
-make[7]: Target `do_build_all' not remade because of errors.
-make[6]: *** [build_all] Error 2
-make[5]: *** [do_all] Error 2
-make[5]: Target `do_build_all' not remade because of errors.
-make[4]: *** [build_all] Error 2
-make[3]: *** [build_all_recurse_into_conf] Error 2
-make[3]: Target `build_all' not remade because of errors.
-make[2]: *** [build_all_recurse_into_bsd] Error 2
-make[2]: Target `build_all' not remade because of errors.
-make[1]: *** [build_all_bootstrap_DEVELOPMENT^ARM64^FUXI] Error 2
-make[1]: Target `install' not remade because of errors.
-make: *** [install] Error 2
+/Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/xnu/bsd/dev/dtrace/fasttrap.c:1736:3: warning: mixing declarations and code is incompatible with standards before C99 [-Wdeclaration-after-statement]
+                os_atomic_dec(&provider->ftp_proc->ftpc_acount, relaxed);
+                ^
+/Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/build/xnu.obj/EXPORT_HDRS/libkern/os/atomic_private.h:485:37: note: expanded from macro 'os_atomic_dec'
+#define os_atomic_dec(p, m)         _os_atomic_c11_op(p, 1, m, fetch_sub, -)
+                                    ^
+/Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/build/xnu.obj/EXPORT_HDRS/libkern/os/atomic_private_impl.h:232:2: note: expanded from macro '_os_atomic_c11_op'
+        _os_atomic_c11_op_orig(p, _v, m, o) op _v; \
+        ^
+/Users/runner/work/unixnu-fuxi/unixnu-fuxi/dxb/build/xnu.obj/EXPORT_HDRS/libkern/os/atomic_private_impl.h:222:14: note: expanded from macro '_os_atomic_c11_op_orig'
+        __auto_type _r = os_atomic_std(atomic_##o##_explicit)(\
+                    ^
