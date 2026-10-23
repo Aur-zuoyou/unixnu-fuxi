@@ -194,6 +194,10 @@ jobs:
 
       - name: 第 1 步 - 编 XNU 基线（产出 cpo.json）
         env:
+          # prepare-xnu-source.py 在这个步骤里被调用，它用 secrets.GITHUB_TOKEN
+          # 走 git/blobs API 取 DriverKit 头文件；不传进来就是匿名额度（60/h），
+          # 一超就 HTTP 403 rate limit exceeded。
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           UNIXNU_XNU_TAG: ${{ github.event.inputs.xnu_tag || 'xnu-10063.141.1' }}
           UNIXNU_XNU_COMMIT: ${{ github.event.inputs.xnu_commit || 'd8b80295118ef25ac3a784134bcf95cd8e88109f' }}
           UNIXNU_XNU_DARWIN: ${{ github.event.inputs.xnu_darwin || '23.6.0' }}
