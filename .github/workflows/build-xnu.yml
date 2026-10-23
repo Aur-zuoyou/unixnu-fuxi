@@ -52,8 +52,13 @@ jobs:
           mkdir -p dxb/patches
           cp xnu/patches/*.patch xnu/patches/*.sh dxb/patches/ 2>/dev/null || cp xnu/patches/*.patch dxb/patches/
           # libfirehose_kernel 只出 arm64e，而我们的内核是普通 arm64
-          sed -i '' 's/ARCHS="x86_64 arm64e" VALID_ARCHS="x86_64 arm64e"/ARCHS="x86_64 arm64e arm64" VALID_ARCHS="x86_64 arm64e arm64"/' dxb/build.sh
-          grep -c 'VALID_ARCHS="x86_64 arm64e arm64"' dxb/build.sh
+          # 只编 arm64。arm64e 会让 __has_feature(ptrauth_calls) 为真，XNU 于是
+          # 编进 Apple 专有的 JOP 代码（pmap->disable_jop、task->jop_pid、
+          # pmap_sign_user_ptr），而这些字段在 HAS_APPLE_PAC=0 的板上不存在：
+          #   vm_shared_region.c: no member named 'disable_jop' in 'struct pmap'
+          # 之前那句 sed 只是把 arm64 追加进 ARCHS，arm64e 仍然会被编。
+          sed -i '' 's/ARCHS="x86_64 arm64e" VALID_ARCHS="x86_64 arm64e"/ARCHS="arm64" VALID_ARCHS="arm64"/' dxb/build.sh
+          grep -c 'VALID_ARCHS="arm64"' dxb/build.sh
           ls dxb/patches
 
       - name: 依赖
