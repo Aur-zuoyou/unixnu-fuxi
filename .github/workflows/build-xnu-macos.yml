@@ -245,6 +245,8 @@ jobs:
           # 只产出编译记录（startup.o.json / *.cpo.json），
           # 然后才 build_archives + 第二遍完整链接。
           XNU_BOOTSTRAP: "1"
+          # 官方顺序：先只装头文件铺好 fakeroot，再编 archive，最后链接。
+          XNU_BUILD_TARGET: "installhdrs"
         run: |
           set -euo pipefail
           cd UniXNU
@@ -334,6 +336,78 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           [ -n "$ok" ] || { echo "一个 archive 都没编出来"; exit 1; }
+
+      # ── 第 3 步：archive 齐了，再跑一次做完整链接 ─────────────────
+      - name: 第 3 步 - 完整链接（带设备 archive）
+        env:
+          # prepare-xnu-source.py 在这个步骤里被调用，它用 secrets.GITHUB_TOKEN
+          # 走 git/blobs API 取 DriverKit 头文件；不传进来就是匿名额度（60/h），
+          # 一超就 HTTP 403 rate limit exceeded。
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UNIXNU_XNU_TAG: ${{ github.event.inputs.xnu_tag || 'xnu-10063.141.1' }}
+          UNIXNU_XNU_COMMIT: ${{ github.event.inputs.xnu_commit || 'd8b80295118ef25ac3a784134bcf95cd8e88109f' }}
+          UNIXNU_XNU_DARWIN: ${{ github.event.inputs.xnu_darwin || '23.6.0' }}
+          UNIXNU_XNU_VERSION: ${{ github.event.inputs.xnu_version || '10063.141.1' }}
+          JOBS: "6"
+          # 对齐 hanzi123-bilp/unixnu-fuxi 的 configs/fuxi_defconfig。
+          # 第 1 步只要自洽就行（NATIVE_ARCH_TIMER=1 必须配 ARMCPU=1，
+          # 否则 build-xnu-4k-baseline.sh L509 直接 exit 1），
+          # 但 fuxi_defconfig 里 CONFIG_XNU_ARMCPU=y 且 CONFIG_XNU_NATIVE_UFS=y，
+          # 所以下面按 defconfig 全开。
+          XNU_SOURCE_CORECRYPTO14: "1"
+          XNU_SOURCE_PTHREAD: "1"
+          XNU_ARM_DT_PLATFORM: "1"
+          XNU_ARMVIRT_PLATFORM: "0"
+          XNU_ARMCPU: "1"
+          XNU_NATIVE_UFS: "1"
+          XNU_NATIVE_AES: "1"
+          XNU_NATIVE_VIRTIO_BLOCK: "0"
+          XNU_NATIVE_RAM_BLOCK: "0"
+          XNU_NATIVE_VIRTIO_CONSOLE: "0"
+          XNU_NATIVE_MOBILE_DISPLAY: "0"
+          XNU_NATIVE_LEGACY_DISPLAY: "0"
+          XNU_NATIVE_ADRENO: "0"
+          XNU_NATIVE_OFFLINE_GPU: "0"
+          XNU_VERIFIED_ROOT_PROBE: "0"
+          XNU_OWNER_ROOT_AUDIT: "0"
+          XNU_OWNER_ROOT_TRUST: "0"
+          XNU_SHENG_PMGR: "0"
+          XNU_SOURCE_MOCKFS: "0"
+          XNU_BOOT_PROGRESS: "0"
+          XNU_SMMU4K_PROBE: "0"
+          XNU_ADRENO_FIRMWARE_PROBE: "0"
+          XNU_ADRENO_PM4_PROBE: "0"
+          XNU_CONSTANT_UPLOADS_PROBE: "0"
+          XNU_NATIVE_CS_HASH_CACHE: "1"
+          XNU_NATIVE_ARCH_TIMER: "1"
+          XNU_NATIVE_PAN: "1"
+          XNU_DT_PANIC_REGION: "1"
+          XNU_TRUST_CACHE_RUNTIME: "1"
+          XNU_ZONE_PGZ_ALIGNMENT_PROBE: "1"
+          XNU_CRYPTO_BOOTSTRAP: "prelinked"
+          XNU_BUILD_WERROR: "0"
+          # 对齐 unixnu 驱动 scripts/unixnu/kernel.py L80-94 的第一遍：
+          # 从零编译时先跑一次 XNU_BOOTSTRAP=1 的 pass，跳过 archive 检查、
+          # 只产出编译记录（startup.o.json / *.cpo.json），
+          # 然后才 build_archives + 第二遍完整链接。
+          XNU_BOOTSTRAP: "1"
+          # 官方顺序：先只装头文件铺好 fakeroot，再编 archive，最后链接。
+        run: |
+          set -uo pipefail
+          cd UniXNU
+          if ! bash -x scripts/build-xnu-4k-baseline.sh > step3.log 2>&1; then
+            echo "===== 第 3 步失败，trace 尾部 ====="
+            tail -60 step3.log
+            cp step3.log "$GITHUB_WORKSPACE/step3.log"
+            exit 1
+          fi
+          cp step3.log "$GITHUB_WORKSPACE/step3.log"
+          echo "===== 内核产物 ====="
+          find build/xnu -name 'mach.development.bcm2837*' | head -5
+          mkdir -p "$GITHUB_WORKSPACE/out-kernel"
+          cp build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf \
+             "$GITHUB_WORKSPACE/out-kernel/mach.development.bcm2837" || true
+          ls -la "$GITHUB_WORKSPACE/out-kernel" || true
 
       - name: 产物检查
         if: always()
