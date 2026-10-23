@@ -67,6 +67,12 @@ jobs:
           # 所以把 arm64 也加进这个库的 ARCHS。
           sed -i '' 's/ARCHS="x86_64 arm64e" VALID_ARCHS="x86_64 arm64e"/ARCHS="x86_64 arm64e arm64" VALID_ARCHS="x86_64 arm64e arm64"/' dxb/build.sh
           grep -c 'VALID_ARCHS="x86_64 arm64e arm64"' dxb/build.sh
+          # 内核按 iOS 目标编之后，libfirehose_kernel.a 若是 macOS 切片会被
+          # 链接器整份丢弃（"ignoring file ..., building for macOS-arm64"），
+          # 于是 ___firehose_buffer_create 等 5 个符号全部 undefined。
+          # 把这个库也按 iphoneos / arm64 编。
+          sed -i '' 's|-sdk macosx ARCHS="x86_64 arm64e arm64" VALID_ARCHS="x86_64 arm64e arm64"|-sdk iphoneos ARCHS="arm64" VALID_ARCHS="arm64"|' dxb/build.sh
+          grep -c -- '-sdk iphoneos ARCHS="arm64"' dxb/build.sh
           ls dxb/patches
 
       - name: 依赖
