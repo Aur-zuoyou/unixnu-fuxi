@@ -90,6 +90,11 @@ jobs:
           # ROOT/build/xnu/.../*.cpo.json。所以把设备仓库 scripts 叠进去。
           cp -a "$SHENG/scripts/." UniXNU/scripts/
 
+          # kits/NativePrelink 的两个补丁对 xnu-10063.141.1 的 OSKext.cpp 打不上
+          # （security-init.patch / sparse-index.patch）。它们是预链接 kext 的
+          # 支持补丁，启动本身不需要；先摘掉，让官方的基线脚本能跑完。
+          rm -f UniXNU/kits/NativePrelink/patches/xnu-10063.141.1-*.patch
+
           test -f UniXNU/scripts/build-xnu-4k-baseline.sh
           test -f UniXNU/scripts/build-arm-driver.py
           test -f UniXNU/drivers/NativeUfs/NativeUfs.cpp
