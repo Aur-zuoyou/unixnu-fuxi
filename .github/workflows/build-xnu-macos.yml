@@ -100,6 +100,14 @@ jobs:
           echo "--- 第 43 行现在是 ---"
           sed -n '43p' UniXNU/scripts/build-xnu-4k-baseline.sh
 
+          # offline-component-load-probes.patch 里对 native_legacy_display_probe
+          # 有两处调用：一处只有 #if DEVELOPMENT || DEBUG 保护（没跟
+          # XNU_NATIVE_LEGACY_DISPLAY 开关挂钩）。不编那个 archive 时链接就报
+          #   Undefined symbols: "_native_legacy_display_probe", referenced from _bsd_init
+          # 用工具把这几行从补丁里摘掉，并修正 hunk 行数。
+          python3 "$GITHUB_WORKSPACE/tools/strip_patch_lines.py" \
+            UniXNU/patches/xnu/offline-component-load-probes.patch \
+            native_legacy_display_probe
           test -f UniXNU/scripts/build-xnu-4k-baseline.sh
           test -f UniXNU/scripts/build-arm-driver.py
           test -f UniXNU/drivers/NativeUfs/NativeUfs.cpp
