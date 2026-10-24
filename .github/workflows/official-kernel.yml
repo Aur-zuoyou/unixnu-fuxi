@@ -78,6 +78,13 @@ jobs:
             printf '%-10s %s\n' "$t" "$(command -v "$t" || echo MISSING)"
           done
 
+      - name: 打开 CONFIG_XNU_BUILD_ARCHIVES
+        run: |
+          set -x
+          F=device/configs/$DEFCONFIG
+          grep -q '^CONFIG_XNU_BUILD_ARCHIVES=y' "$F" || echo 'CONFIG_XNU_BUILD_ARCHIVES=y' >> "$F"
+          tail -5 "$F"
+
       - name: 补 kits/sheng（设备仓库的链接名目录是空的）
         run: |
           set -x
