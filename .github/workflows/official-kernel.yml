@@ -192,6 +192,7 @@ jobs:
           ./unixnu build kernel 2>&1 | tee /tmp/build-kernel.log
 
       - name: 第二遍：恢复完整 archives 列表
+        if: always()
         working-directory: unixnu
         run: |
           set -eux
@@ -224,6 +225,7 @@ jobs:
           PY
 
       - name: 第二遍：切 fuxi_full_defconfig 并编内核
+        if: always()
         working-directory: unixnu
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -234,6 +236,7 @@ jobs:
           echo "kernel exit=$?" | tee -a /tmp/build-kernel2.log
 
       - name: 官方 build payload
+        if: always()
         if: success()
         working-directory: unixnu
         env:
