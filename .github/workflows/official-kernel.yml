@@ -85,6 +85,23 @@ jobs:
           grep -q '^CONFIG_XNU_BUILD_ARCHIVES=y' "$F" || echo 'CONFIG_XNU_BUILD_ARCHIVES=y' >> "$F"
           tail -5 "$F"
 
+      - name: 只保留 legacy-stub 这一个 archive
+        run: |
+          set -x
+          python3 - <<'PY'
+          import io, re, tomllib
+          p = 'device/board.toml'
+          src = io.open(p, encoding='utf-8').read()
+          m = re.search(r'archives\s*=\s*\[(?:[^\[\]]|\n)*?\]', src)
+          assert m, 'archives block not found'
+          new = 'archives = [\n    "build-legacy-stub.py",\n  ]'
+          out = src[:m.start()] + new + src[m.end():]
+          d = tomllib.loads(out)
+          assert d['kernel']['archives'] == ['build-legacy-stub.py'], d['kernel']['archives']
+          io.open(p, 'w', encoding='utf-8', newline='\n').write(out)
+          print('archives ->', d['kernel']['archives'])
+          PY
+
       - name: 补 kits/sheng（设备仓库的链接名目录是空的）
         run: |
           set -x
