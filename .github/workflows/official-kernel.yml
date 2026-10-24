@@ -206,9 +206,12 @@ jobs:
         if: always()
         working-directory: unixnu
         run: |
+          set +e
           echo "===== 产物 ====="
           find . -maxdepth 7 \( -name 'mach.*' -o -name 'kernel.*' -o -name 'payload.img' -o -name 'payload.json' -o -name 'boot.img' \) 2>/dev/null | head -40 || true
           ls -la build 2>/dev/null | head -20
+          ls -l out/fuxi/kernel/kernel.macho out/fuxi/payload/payload.img 2>/dev/null
+          true
 
       - name: 上传内核
         if: always()
@@ -223,7 +226,7 @@ jobs:
 
       - name: 上传二进制到 Release
         id: release
-        if: success()
+        if: always()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         working-directory: unixnu
