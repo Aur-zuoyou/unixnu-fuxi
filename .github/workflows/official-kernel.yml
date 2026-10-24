@@ -83,7 +83,19 @@ jobs:
           set -x
           F=device/configs/$DEFCONFIG
           grep -q '^CONFIG_XNU_BUILD_ARCHIVES=y' "$F" || echo 'CONFIG_XNU_BUILD_ARCHIVES=y' >> "$F"
-          tail -5 "$F"
+          # 这个「控制台版」配置开着 BOOT_PROGRESS，但构建脚本要求 UFS/owner-root/
+          # virtio/corecrypto 全在，否则直接 exit 1。关掉它才能编过。
+          python3 - "$F" <<'PY'
+          import io, sys, re
+          p = sys.argv[1]
+          t = io.open(p, encoding='utf-8').read()
+          t = re.sub(r'(?m)^CONFIG_XNU_BOOT_PROGRESS=.*$', 'CONFIG_XNU_BOOT_PROGRESS=n', t)
+          if 'CONFIG_XNU_BOOT_PROGRESS=' not in t:
+              t += 'CONFIG_XNU_BOOT_PROGRESS=n\n'
+          io.open(p, 'w', encoding='utf-8', newline='\n').write(t)
+          print('BOOT_PROGRESS ->', [l for l in t.split('\n') if 'BOOT_PROGRESS' in l])
+          PY
+          tail -6 "$F"
 
       - name: 只保留 legacy-stub 这一个 archive
         run: |
