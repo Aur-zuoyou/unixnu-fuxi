@@ -78,6 +78,19 @@ jobs:
             printf '%-10s %s\n' "$t" "$(command -v "$t" || echo MISSING)"
           done
 
+      - name: 补 kits/sheng（设备仓库的链接名目录是空的）
+        run: |
+          set -x
+          mkdir -p device/kits/sheng
+          for f in device/package/*; do
+            [ -f "$f" ] || continue
+            b=$(basename "$f")
+            [ -e "device/kits/sheng/$b" ] || cp "$f" "device/kits/sheng/$b"
+          done
+          ls -la device/kits/sheng | head -20
+          echo "--- 检查 stub 源 ---"
+          ls -l device/kits/sheng/LegacyDisplayStub.c || echo "STUB MISSING"
+
       - name: 选择设备
         working-directory: unixnu
         run: ./unixnu defconfig "$DEFCONFIG"
