@@ -59,7 +59,9 @@ jobs:
             echo "=== 克隆 UniXNU + DarwinBoot ==="
             git clone --depth 1 "$UNIXNU_REPO" "$UNIXNU_ROOT"
             mkdir -p "$UNIXNU_ROOT/drivers"
-            git clone --depth 1 "$DARWINBOOT_REPO" "$UNIXNU_ROOT/drivers/DarwinBoot"
+            git clone "$DARWINBOOT_REPO" "$UNIXNU_ROOT/drivers/DarwinBoot"
+            # 钉住 10-21 的版本（我们 10-23 能跑的固件用的就是它；10-22 的 d099354 起不来）
+            git -C "$UNIXNU_ROOT/drivers/DarwinBoot" checkout -q 85332b3
             git -C "$UNIXNU_ROOT/drivers/DarwinBoot" log -1 --format='DARWINBOOT %h %s'
             echo "=== 构建 ==="
             ./build_uefi.py -d fuxi -r DEBUG -c
