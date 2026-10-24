@@ -237,7 +237,6 @@ jobs:
 
       - name: 官方 build payload
         if: always()
-        if: success()
         working-directory: unixnu
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
