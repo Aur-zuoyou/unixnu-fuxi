@@ -1,13 +1,13 @@
 name: official-kernel
 
-# 严格按 UniXNU 官方教程编 fuxi 内核：
+# 按 UniXNU 官方教程编译 fuxi 内核：
 #   ./unixnu defconfig fuxi_defconfig
 #   ./unixnu fetch
 #   ./unixnu build kernel
 #
-# 官方文档（https://unixnu.com/devices/fuxi）指定的 fuxi 设备仓库是
-# hanzi123-bilp/unixnu-fuxi；驱动仓库是 UniXNU/UniXNU。两者都在这里检出，
-# 不再自己拼 build-xnu-4k-baseline.sh。
+# 驱动仓库：UniXNU/UniXNU（官方框架）
+# 设备仓库：hanzi123-bilp/unixnu-fuxi（官方设备页指定的 fuxi 端口）
+# 日志无论成败都推到 ci-logs 分支，方便本地读取。
 
 on:
   push:
@@ -35,18 +35,23 @@ defaults:
 jobs:
   build:
     runs-on: macos-14
-    timeout-minutes: 360
+    timeout-minutes: 300
     env:
       UNIXNU_DEVICE: ${{ github.workspace }}/device
     steps:
-      - name: 取 UniXNU（驱动仓库）
+      - name: 取本仓库（日志推回用）
+        uses: actions/checkout@v4
+        with:
+          path: ourrepo
+
+      - name: 取 UniXNU（官方框架）
         uses: actions/checkout@v4
         with:
           repository: UniXNU/UniXNU
           path: unixnu
           persist-credentials: false
 
-      - name: 取设备仓库（官方指定的 fuxi 端口）
+      - name: 取设备仓库（官方 fuxi 端口）
         uses: actions/checkout@v4
         with:
           repository: hanzi123-bilp/unixnu-fuxi
@@ -72,52 +77,54 @@ jobs:
 
       - name: 选择设备
         working-directory: unixnu
-        run: |
-          ./unixnu defconfig "$DEFCONFIG"
+        run: ./unixnu defconfig "$DEFCONFIG"
 
       - name: 拉源码
         working-directory: unixnu
-        run: |
-          ./unixnu fetch
+        run: ./unixnu fetch
 
-      - name: 编内核（官方 unixnu build kernel）
+      - name: 编内核
         working-directory: unixnu
         run: |
           set -o pipefail
-          ./unixnu build kernel 2>&1 | tee build-kernel.log
+          ./unixnu build kernel 2>&1 | tee /tmp/build-kernel.log
 
-      - name: 列出内核产物
+      - name: 列出产物
         if: always()
         working-directory: unixnu
         run: |
-          echo "===== mach.* ====="
-          find . -name 'mach.*' -maxdepth 8 2>/dev/null | head -20 || true
-          echo "===== kernel* ====="
-          find . -name 'kernel*' -maxdepth 8 -size +1M 2>/dev/null | head -20 || true
+          echo "===== 产物 ====="
+          find . -maxdepth 7 \( -name 'mach.*' -o -name 'kernel.*' -o -name '*.cpo.json' \) 2>/dev/null | head -40
+          ls -la build 2>/dev/null | head -20
 
       - name: 上传内核
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: fuxi-kernel-official
+          name: fuxi-kernel-unixnu
           path: |
             unixnu/build/**
-            unixnu/build-kernel.log
+            /tmp/build-kernel.log
           if-no-files-found: warn
           retention-days: 14
 
-      - name: 失败时把日志推到 ci-logs 分支
-        if: failure()
+      - name: 把日志推到 ci-logs
+        if: always()
+        working-directory: ourrepo
         run: |
           set +e
           mkdir -p ci-logs-official
-          cp unixnu/build-kernel.log ci-logs-official/ 2>/dev/null || true
-          if [ -f unixnu/build-kernel.log ]; then
-            tail -120 unixnu/build-kernel.log > ci-logs-official/tail.log
-          fi
+          cp /tmp/build-kernel.log ci-logs-official/build-kernel.log 2>/dev/null
+          {
+            echo "===== unixnu/build ====="
+            ls -la ../unixnu/build 2>/dev/null | head -25
+            echo
+            echo "===== 日志尾部 150 行 ====="
+            tail -150 /tmp/build-kernel.log 2>/dev/null
+          } > ci-logs-official/tail.txt
           git config user.name "xnu-bot"
           git config user.email "xnu-bot@users.noreply.github.com"
-          git checkout --orphan ci-logs-official-tmp 2>/dev/null || true
-          git add -f ci-logs-official 2>/dev/null || true
-          git commit -qm "official kernel log" 2>/dev/null || true
-          git push -f origin HEAD:ci-logs 2>/dev/null || echo "log push failed"
+          git checkout -f --orphan official-logs-tmp
+          git add -f ci-logs-official
+          git commit -qm "unixnu fuxi kernel log" || true
+          git push -f origin HEAD:ci-logs
