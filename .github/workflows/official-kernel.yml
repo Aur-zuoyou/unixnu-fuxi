@@ -81,6 +81,7 @@ jobs:
 
       - name: 打开 CONFIG_XNU_BUILD_ARCHIVES
         run: |
+          set +e
           set -x
           F=device/configs/$DEFCONFIG
           grep -q '^CONFIG_XNU_BUILD_ARCHIVES=y' "$F" || echo 'CONFIG_XNU_BUILD_ARCHIVES=y' >> "$F"
@@ -190,7 +191,8 @@ jobs:
           UNIXNU_UNIQUE_CHIP_ID: "0123456789ABCDEF"
         run: |
           set -x
-          LOG2=/tmp/build-kernel2.log
+          mkdir -p "$GITHUB_WORKSPACE/ourrepo/ci-logs-official"
+          LOG2="$GITHUB_WORKSPACE/ourrepo/ci-logs-official/pass2.log"
           : > "$LOG2"
           echo "=== PASS1: fuxi_defconfig ===" | tee -a "$LOG2"
           ./unixnu build kernel 2>&1 | tee -a "$LOG2"
@@ -234,7 +236,7 @@ jobs:
           echo "=== payload ===" | tee -a "$LOG2"
           ./unixnu build payload 2>&1 | tee -a "$LOG2"
           echo "PAYLOAD_EXIT=$?" | tee -a "$LOG2"
-          cp "$LOG2" /tmp/build-payload.log
+          cp "$LOG2" /tmp/build-payload.log 2>/dev/null
 
       - name: 列出产物
         if: always()
@@ -284,6 +286,7 @@ jobs:
         run: |
           set +e
           mkdir -p ci-logs-official/unixnu-logs
+          cp ci-logs-official/pass2.log ci-logs-official/build-kernel2.log 2>/dev/null
           cp /tmp/build-kernel.log ci-logs-official/build-kernel.log 2>/dev/null
           cp /tmp/build-payload.log ci-logs-official/build-payload.log 2>/dev/null
           cp -r ../unixnu/out/fuxi/logs/. ci-logs-official/unixnu-logs/ 2>/dev/null
