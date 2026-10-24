@@ -83,8 +83,36 @@ jobs:
         working-directory: unixnu
         run: ./unixnu fetch
 
+      - name: 给 prepare-xnu-source.py 加 token
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -x
+          F=unixnu/out/fuxi/tree/scripts/prepare-xnu-source.py
+          ls -l "$F" || exit 0
+          python3 - "$F" <<'PY'
+          import io, sys, os
+          p = sys.argv[1]
+          t = io.open(p, encoding='utf-8').read()
+          if 'GITHUB_TOKEN' in t:
+              print('already patched'); raise SystemExit(0)
+          old = 'with urllib.request.urlopen(request, timeout=30) as response:'
+          new = ('_tok = os.environ.get("GITHUB_TOKEN") or ""\n'
+                 '    if _tok:\n'
+                 '        request.add_header("Authorization", "Bearer " + _tok)\n'
+                 '    request.add_header("User-Agent", "unixnu-build")\n'
+                 '    with urllib.request.urlopen(request, timeout=30) as response:')
+          if old not in t:
+              print('ANCHOR NOT FOUND'); raise SystemExit(1)
+          t = t.replace(old, new, 1)
+          io.open(p, 'w', encoding='utf-8').write(t)
+          print('patched')
+          PY
+
       - name: 编内核
         working-directory: unixnu
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -o pipefail
           ./unixnu build kernel 2>&1 | tee /tmp/build-kernel.log
