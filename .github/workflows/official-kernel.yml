@@ -171,6 +171,17 @@ jobs:
           print('patched')
           PY
 
+      - name: 放 uefi-sheng 树（payload 的 panic 屏要 Font.h）
+        working-directory: unixnu
+        run: |
+          set -x
+          T=out/fuxi/tree/uefi-sheng
+          if [ ! -d "$T/Silicon/Silicium/SiliciumPkg/Library/FrameBufferSerialPortLib" ]; then
+            rm -rf "$T"
+            git clone --depth 1 https://github.com/hanzi123-bilp/uefi-fuxi.git "$T" 2>&1 | tail -3
+          fi
+          ls -l "$T/Silicon/Silicium/SiliciumPkg/Library/FrameBufferSerialPortLib/Font.h" || echo "FONT MISSING"
+
       - name: 编内核
         working-directory: unixnu
         env:
