@@ -1,0 +1,116 @@
+name: fuxi-sheng-uefi
+
+# 用 UniXNU/uefi-sheng（我们验证过能跑的那个仓库）+ 当前的 UniXNU/DarwinBoot 重编 fuxi 固件。
+# 目的：把固件里的旧版 loader 换成 v2（官方文档里 DARWINBOOT: loader v2 installed EL1）。
+# 配置沿用 Resources/Configs/fuxi.toml（FD base 0xC0000000 / size 0x1400000），
+# 这是本机验证过的布局，不改。
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/fuxi-sheng-uefi.yml"
+
+permissions:
+  contents: write
+
+env:
+  UNIXNU_REPO: https://github.com/UniXNU/UniXNU
+  DARWINBOOT_REPO: https://github.com/UniXNU/DarwinBoot
+  SHENG_REPO: https://github.com/UniXNU/uefi-sheng
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: 取本仓库
+        uses: actions/checkout@v4
+        with:
+          path: ourrepo
+
+      - name: 取 uefi-sheng
+        run: |
+          git clone --depth 1 "$SHENG_REPO" uefi
+          cd uefi
+          git submodule update --init --depth 1 \
+            Common/Mu \
+            Common/Mu_OEM_Sample \
+            Mu_Basecore \
+            Silicium-ACPI \
+            Silicon/Silicium/OpensslPkg/Library/OpensslLib/openssl 2>&1 | tail -5
+
+      - name: fuxi 配置确认
+        working-directory: uefi
+        run: |
+          echo "--- Resources/Configs/fuxi.toml ---"
+          sed -n '1,40p' Resources/Configs/fuxi.toml
+
+      - name: 装工具链
+        working-directory: uefi
+        run: ./setup_env.sh -p apt 2>&1 | tail -15
+
+      - name: 编固件（含当前 DarwinBoot）
+        working-directory: uefi
+        env:
+          UNIXNU_ROOT: ${{ github.workspace }}/UniXNU
+        run: |
+          set -o pipefail
+          git clone --depth 1 "$UNIXNU_REPO" "$UNIXNU_ROOT"
+          mkdir -p "$UNIXNU_ROOT/drivers"
+          git clone --depth 1 "$DARWINBOOT_REPO" "$UNIXNU_ROOT/drivers/DarwinBoot"
+          echo "--- DarwinBoot HEAD ---"
+          git -C "$UNIXNU_ROOT/drivers/DarwinBoot" log -1 --format='%h %s'
+          ./build_uefi.py -d fuxi -r DEBUG -c 2>&1 | tee /tmp/build-uefi.log | tail -30
+
+      - name: 检查产物
+        if: always()
+        working-directory: uefi
+        run: |
+          set +e
+          ls -l Mu-fuxi*.img 2>/dev/null
+          ls -l Build/fuxiPkg/*/FV/SILICIUM_UEFI.fd 2>/dev/null
+          python3 tools/mkbootimg_v3.py info --image $(ls Mu-fuxi*.img 2>/dev/null | head -1) 2>&1 | head -15
+          true
+
+      - name: 推产物到 Release
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: uefi
+        run: |
+          set +e
+          TAG="sheng-uefi-$(date +%Y%m%d-%H%M%S)"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          files=""
+          for f in Mu-fuxi*.img Build/fuxiPkg/*/FV/SILICIUM_UEFI.fd; do
+            [ -f "$f" ] && files="$files $f"
+          done
+          echo "assets:$files"
+          [ -n "$files" ] && gh release create "$TAG" $files --repo "$GITHUB_REPOSITORY" \
+            --title "fuxi sheng uefi $TAG" --notes "firmware with current DarwinBoot" || echo "release failed"
+
+      - name: 推日志到 ci-logs
+        if: always()
+        working-directory: ourrepo
+        run: |
+          set +e
+          mkdir -p ci-logs-shenguefi
+          cp /tmp/build-uefi.log ci-logs-shenguefi/ 2>/dev/null
+          {
+            echo "=== 产物 ==="
+            ls -l ../uefi/Mu-fuxi*.img ../uefi/Build/fuxiPkg/*/FV/SILICIUM_UEFI.fd 2>/dev/null
+            echo
+            echo "=== 日志尾部 100 行 ==="
+            tail -100 /tmp/build-uefi.log 2>/dev/null
+          } > ci-logs-shenguefi/summary.txt
+          git config user.name "xnu-bot"
+          git config user.email "xnu-bot@users.noreply.github.com"
+          git checkout -f --orphan sheng-logs-tmp
+          git add -f ci-logs-shenguefi
+          git commit -qm "sheng uefi build" || true
+          git push -f origin HEAD:ci-logs || echo "push failed"
