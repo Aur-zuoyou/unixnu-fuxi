@@ -106,10 +106,20 @@ jobs:
           src = io.open(p, encoding='utf-8').read()
           m = re.search(r'archives\s*=\s*\[(?:[^\[\]]|\n)*?\]', src)
           assert m, 'archives block not found'
-          new = 'archives = [\n    "build-legacy-stub.py",\n  ]'
+          keep = [
+              "build-corecrypto-14.py",
+              "build-corecrypto-14.py --namespace",
+              "build-arm-driver.py ArmDTPlatform",
+              "build-arm-driver.py ArmCpu",
+              "build-arm-driver.py NativeAES",
+              "build-native-aes-bindings.py",
+              "build-libpthread-kernel.py",
+              "build-legacy-stub.py",
+          ]
+          new = 'archives = [\n' + ''.join('    "%s",\n' % k for k in keep) + '  ]'
           out = src[:m.start()] + new + src[m.end():]
           d = tomllib.loads(out)
-          assert d['kernel']['archives'] == ['build-legacy-stub.py'], d['kernel']['archives']
+          assert len(d['kernel']['archives']) == 8, d['kernel']['archives']
           io.open(p, 'w', encoding='utf-8', newline='\n').write(out)
           print('archives ->', d['kernel']['archives'])
           PY
