@@ -184,6 +184,9 @@ jobs:
         working-directory: unixnu
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # board.toml 标 unique_chip_id = required；先给占位值，
+          # 真值应从设备读（stage A 只影响平台种子/trust cache）
+          UNIXNU_UNIQUE_CHIP_ID: "0123456789ABCDEF"
         run: |
           set -o pipefail
           ./unixnu build payload 2>&1 | tee /tmp/build-payload.log | tail -40
