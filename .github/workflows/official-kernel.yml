@@ -207,6 +207,7 @@ jobs:
               "build-arm-driver.py ArmDTPlatform",
               "build-arm-driver.py ArmCpu",
               "build-arm-driver.py NativeAES",
+              "build-arm-driver.py NativeVirtioBlock --verified-root --verified-root-bundle",
               "audit-storage-interface.py",
               "build-arm-driver.py NativeUfs",
               "build-native-aes-bindings.py",
@@ -225,6 +226,15 @@ jobs:
                   print('no block', p); continue
               io.open(p, 'w', encoding='utf-8', newline='\n').write(s[:m.start()] + block + s[m.end():])
               print('restored', p)
+          # fuxi_full_defconfig 缺 CONFIG_XNU_NATIVE_VIRTIO_BLOCK=y，
+          # 而 boot-progress 的硬性检查要求 UFS/owner-root/virtio/corecrypto 全在
+          cfg = '../device/configs/fuxi_full_defconfig'
+          s = io.open(cfg, encoding='utf-8').read()
+          if 'CONFIG_XNU_NATIVE_VIRTIO_BLOCK=y' not in s:
+              s = s.replace('CONFIG_XNU_NATIVE_VIRTIO_BLOCK_ARCHIVE',
+                            'CONFIG_XNU_NATIVE_VIRTIO_BLOCK=y\nCONFIG_XNU_NATIVE_VIRTIO_BLOCK_ARCHIVE', 1)
+              io.open(cfg, 'w', encoding='utf-8', newline='\n').write(s)
+              print('added CONFIG_XNU_NATIVE_VIRTIO_BLOCK=y')
           PY
 
           echo "=== PASS2: fuxi_full_defconfig ===" | tee -a "$LOG2"
