@@ -34,9 +34,10 @@ defaults:
 
 jobs:
   build:
-    runs-on: macos-14
-    timeout-minutes: 300
+    runs-on: macos-26
+    timeout-minutes: 360
     env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       UNIXNU_DEVICE: ${{ github.workspace }}/device
     steps:
       - name: 取本仓库（日志推回用）
@@ -71,6 +72,8 @@ jobs:
           sw_vers
           uname -m
           xcodebuild -version || true
+          xcrun --sdk iphoneos --show-sdk-version || true
+          xcrun --sdk iphoneos --find mig || true
           for t in git make clang cmake ninja unifdef ld.lld mformat mcopy dtc; do
             printf '%-10s %s\n' "$t" "$(command -v "$t" || echo MISSING)"
           done
