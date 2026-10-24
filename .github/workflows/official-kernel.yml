@@ -9,6 +9,7 @@ name: official-kernel
 # 设备仓库：hanzi123-bilp/unixnu-fuxi（官方设备页指定的 fuxi 端口）
 # 日志无论成败都推到 ci-logs 分支，方便本地读取。
 
+# trigger: ufs pass
 on:
   push:
     paths:
