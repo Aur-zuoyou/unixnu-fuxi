@@ -207,7 +207,7 @@ jobs:
         working-directory: unixnu
         run: |
           echo "===== 产物 ====="
-          find . -maxdepth 7 \( -name 'mach.*' -o -name 'kernel.*' -o -name 'payload.img' -o -name 'payload.json' -o -name 'boot.img' \) 2>/dev/null | head -40
+          find . -maxdepth 7 \( -name 'mach.*' -o -name 'kernel.*' -o -name 'payload.img' -o -name 'payload.json' -o -name 'boot.img' \) 2>/dev/null | head -40 || true
           ls -la build 2>/dev/null | head -20
 
       - name: 上传内核
@@ -221,31 +221,48 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-      - name: 把日志推到 ci-logs
+      - name: 上传二进制到 Release
+        id: release
+        if: success()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: unixnu
+        run: |
+          set +e
+          TAG="fuxi-$(date +%Y%m%d-%H%M%S)"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          files=""
+          for f in out/fuxi/payload/payload.img out/fuxi/kernel/kernel.macho; do
+            [ -f "$f" ] && files="$files $f"
+          done
+          echo "assets:$files"
+          if [ -n "$files" ]; then
+            gh release create "$TAG" $files --repo "$GITHUB_REPOSITORY" \
+              --title "fuxi unixnu build $TAG" --notes "kernel + payload" || echo "release failed"
+          fi
+
+      - name: 把文本日志推到 ci-logs
         if: always()
         working-directory: ourrepo
         run: |
           set +e
-          mkdir -p ci-logs-official
+          mkdir -p ci-logs-official/unixnu-logs
           cp /tmp/build-kernel.log ci-logs-official/build-kernel.log 2>/dev/null
-          # unixnu 把详细日志写在自己的目录里，一并带走
-          mkdir -p ci-logs-official/unixnu-logs ci-logs-official/out
-          cp ../unixnu/out/fuxi/payload/payload.img ci-logs-official/out/ 2>/dev/null
-          cp ../unixnu/out/fuxi/payload/payload.json ci-logs-official/out/ 2>/dev/null
-          cp ../unixnu/out/fuxi/kernel/kernel.macho ci-logs-official/out/ 2>/dev/null
-          cp /tmp/build-payload.log ci-logs-official/ 2>/dev/null
-          cp -r ../unixnu/out/fuxi/logs/. ci-logs-official/unixnu-logs/ 2>/dev/null || true
-          ls -la ci-logs-official/unixnu-logs 2>/dev/null | head -10
+          cp /tmp/build-payload.log ci-logs-official/build-payload.log 2>/dev/null
+          cp -r ../unixnu/out/fuxi/logs/. ci-logs-official/unixnu-logs/ 2>/dev/null
           {
-            echo "===== unixnu/build ====="
-            ls -la ../unixnu/build 2>/dev/null | head -25
+            echo "=== 产物 ==="
+            ls -l ../unixnu/out/fuxi/kernel/kernel.macho ../unixnu/out/fuxi/payload/payload.img 2>/dev/null
             echo
-            echo "===== 日志尾部 150 行 ====="
-            for f in ../unixnu/out/fuxi/logs/*.log; do echo "=== $f ==="; tail -80 "$f"; done 2>/dev/null || tail -150 /tmp/build-kernel.log
+            echo "=== Release tag ==="
+            echo "${{ steps.release.outputs.tag }}"
+            echo
+            echo "=== payload 日志尾部 80 行 ==="
+            tail -80 /tmp/build-payload.log 2>/dev/null
           } > ci-logs-official/tail.txt
           git config user.name "xnu-bot"
           git config user.email "xnu-bot@users.noreply.github.com"
           git checkout -f --orphan official-logs-tmp
           git add -f ci-logs-official
           git commit -qm "unixnu fuxi kernel log" || true
-          git push -f origin HEAD:ci-logs
+          git push -f origin HEAD:ci-logs || echo "push failed"
