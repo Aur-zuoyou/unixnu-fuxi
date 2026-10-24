@@ -143,12 +143,16 @@ jobs:
           set +e
           mkdir -p ci-logs-official
           cp /tmp/build-kernel.log ci-logs-official/build-kernel.log 2>/dev/null
+          # unixnu 把详细日志写在自己的目录里，一并带走
+          mkdir -p ci-logs-official/unixnu-logs
+          cp -r ../unixnu/out/fuxi/logs/. ci-logs-official/unixnu-logs/ 2>/dev/null || true
+          ls -la ci-logs-official/unixnu-logs 2>/dev/null | head -10
           {
             echo "===== unixnu/build ====="
             ls -la ../unixnu/build 2>/dev/null | head -25
             echo
             echo "===== 日志尾部 150 行 ====="
-            tail -150 /tmp/build-kernel.log 2>/dev/null
+            for f in ../unixnu/out/fuxi/logs/*.log; do echo "=== $f ==="; tail -80 "$f"; done 2>/dev/null || tail -150 /tmp/build-kernel.log
           } > ci-logs-official/tail.txt
           git config user.name "xnu-bot"
           git config user.email "xnu-bot@users.noreply.github.com"
