@@ -183,20 +183,21 @@ jobs:
           fi
           ls -l "$T/Silicon/Silicium/SiliciumPkg/Library/FrameBufferSerialPortLib/Font.h" || echo "FONT MISSING"
 
-      - name: 编内核
+      - name: 编内核（两遍）+ payload
         working-directory: unixnu
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UNIXNU_UNIQUE_CHIP_ID: "0123456789ABCDEF"
         run: |
-          set -o pipefail
-          ./unixnu build kernel 2>&1 | tee /tmp/build-kernel.log
+          set -x
+          LOG2=/tmp/build-kernel2.log
+          : > "$LOG2"
+          echo "=== PASS1: fuxi_defconfig ===" | tee -a "$LOG2"
+          ./unixnu build kernel 2>&1 | tee -a "$LOG2"
+          echo "PASS1_EXIT=$?" | tee -a "$LOG2"
 
-      - name: 第二遍：恢复完整 archives 列表
-        if: always()
-        working-directory: unixnu
-        run: |
-          set -eux
-          python3 - <<'PY'
+          echo "=== 恢复完整 archives ===" | tee -a "$LOG2"
+          python3 - <<'PY' 2>&1 | tee -a "$LOG2"
           import io, re
           full = [
               "build-corecrypto-14.py",
@@ -214,38 +215,26 @@ jobs:
           block = 'archives = [\n' + ''.join('    "%s",\n' % k for k in full) + '  ]'
           for p in ('../device/board.toml', 'out/fuxi/tree/board.toml'):
               try:
-                  t = io.open(p, encoding='utf-8').read()
+                  s = io.open(p, encoding='utf-8').read()
               except FileNotFoundError:
-                  print('skip missing', p); continue
-              m = re.search(r'archives\s*=\s*\[(?:[^\[\]]|\n)*?\]', t)
+                  print('missing', p); continue
+              m = re.search(r'archives\s*=\s*\[(?:[^\[\]]|\n)*?\]', s)
               if not m:
-                  print('no archives block in', p); continue
-              io.open(p, 'w', encoding='utf-8', newline='\n').write(t[:m.start()] + block + t[m.end():])
+                  print('no block', p); continue
+              io.open(p, 'w', encoding='utf-8', newline='\n').write(s[:m.start()] + block + s[m.end():])
               print('restored', p)
           PY
 
-      - name: 第二遍：切 fuxi_full_defconfig 并编内核
-        if: always()
-        working-directory: unixnu
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          ./unixnu defconfig fuxi_full_defconfig 2>&1 | tee /tmp/build-kernel2.log
-          echo "defconfig exit=$?" | tee -a /tmp/build-kernel2.log
-          ./unixnu build kernel 2>&1 | tee -a /tmp/build-kernel2.log
-          echo "kernel exit=$?" | tee -a /tmp/build-kernel2.log
+          echo "=== PASS2: fuxi_full_defconfig ===" | tee -a "$LOG2"
+          ./unixnu defconfig fuxi_full_defconfig 2>&1 | tee -a "$LOG2"
+          echo "DEFCONFIG_EXIT=$?" | tee -a "$LOG2"
+          ./unixnu build kernel 2>&1 | tee -a "$LOG2"
+          echo "PASS2_EXIT=$?" | tee -a "$LOG2"
 
-      - name: 官方 build payload
-        if: always()
-        working-directory: unixnu
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # board.toml 标 unique_chip_id = required；先给占位值，
-          # 真值应从设备读（stage A 只影响平台种子/trust cache）
-          UNIXNU_UNIQUE_CHIP_ID: "0123456789ABCDEF"
-        run: |
-          set -o pipefail
-          ./unixnu build payload 2>&1 | tee /tmp/build-payload.log | tail -40
+          echo "=== payload ===" | tee -a "$LOG2"
+          ./unixnu build payload 2>&1 | tee -a "$LOG2"
+          echo "PAYLOAD_EXIT=$?" | tee -a "$LOG2"
+          cp "$LOG2" /tmp/build-payload.log
 
       - name: 列出产物
         if: always()
