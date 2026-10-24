@@ -190,14 +190,10 @@ jobs:
           set -o pipefail
           ./unixnu build kernel 2>&1 | tee /tmp/build-kernel.log
 
-      - name: 第二遍：完整配置（UFS + boot-progress）
+      - name: 第二遍：恢复完整 archives 列表
         working-directory: unixnu
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          exec > >(tee /tmp/build-kernel2.log) 2>&1
-          set -x
-          echo "=== 恢复完整 archives 列表 ==="
+          set -eux
           python3 - <<'PY'
           import io, re
           full = [
@@ -218,17 +214,23 @@ jobs:
               try:
                   t = io.open(p, encoding='utf-8').read()
               except FileNotFoundError:
-                  print('skip', p); continue
+                  print('skip missing', p); continue
               m = re.search(r'archives\s*=\s*\[(?:[^\[\]]|\n)*?\]', t)
               if not m:
                   print('no archives block in', p); continue
               io.open(p, 'w', encoding='utf-8', newline='\n').write(t[:m.start()] + block + t[m.end():])
               print('restored', p)
           PY
-          echo "=== 切到 fuxi_full_defconfig ==="
-          ./unixnu defconfig fuxi_full_defconfig
-          echo "=== 第二遍编内核 ==="
-          ./unixnu build kernel
+
+      - name: 第二遍：切 fuxi_full_defconfig 并编内核
+        working-directory: unixnu
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./unixnu defconfig fuxi_full_defconfig 2>&1 | tee /tmp/build-kernel2.log
+          echo "defconfig exit=$?" | tee -a /tmp/build-kernel2.log
+          ./unixnu build kernel 2>&1 | tee -a /tmp/build-kernel2.log
+          echo "kernel exit=$?" | tee -a /tmp/build-kernel2.log
 
       - name: 官方 build payload
         if: success()
