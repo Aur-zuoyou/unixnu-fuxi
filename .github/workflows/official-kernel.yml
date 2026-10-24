@@ -195,7 +195,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set +e
+          exec > >(tee /tmp/build-kernel2.log) 2>&1
+          set -x
           echo "=== 恢复完整 archives 列表 ==="
           python3 - <<'PY'
           import io, re
@@ -225,10 +226,9 @@ jobs:
               print('restored', p)
           PY
           echo "=== 切到 fuxi_full_defconfig ==="
-          ./unixnu defconfig fuxi_full_defconfig 2>&1 | tail -5
-          echo "=== 第二遍编内核（可能失败，日志会推回） ==="
-          ./unixnu build kernel 2>&1 | tee /tmp/build-kernel2.log | tail -30
-          echo "exit=$?"
+          ./unixnu defconfig fuxi_full_defconfig
+          echo "=== 第二遍编内核 ==="
+          ./unixnu build kernel
 
       - name: 官方 build payload
         if: success()
