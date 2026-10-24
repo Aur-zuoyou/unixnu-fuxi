@@ -190,6 +190,46 @@ jobs:
           set -o pipefail
           ./unixnu build kernel 2>&1 | tee /tmp/build-kernel.log
 
+      - name: 第二遍：完整配置（UFS + boot-progress）
+        working-directory: unixnu
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          echo "=== 恢复完整 archives 列表 ==="
+          python3 - <<'PY'
+          import io, re
+          full = [
+              "build-corecrypto-14.py",
+              "build-corecrypto-14.py --namespace",
+              "build-arm-driver.py ArmDTPlatform",
+              "build-arm-driver.py ArmCpu",
+              "build-arm-driver.py NativeAES",
+              "audit-storage-interface.py",
+              "build-arm-driver.py NativeUfs",
+              "build-native-aes-bindings.py",
+              "build-boot-progress.py",
+              "build-libpthread-kernel.py",
+              "build-legacy-stub.py",
+          ]
+          block = 'archives = [\n' + ''.join('    "%s",\n' % k for k in full) + '  ]'
+          for p in ('../device/board.toml', 'out/fuxi/tree/board.toml'):
+              try:
+                  t = io.open(p, encoding='utf-8').read()
+              except FileNotFoundError:
+                  print('skip', p); continue
+              m = re.search(r'archives\s*=\s*\[(?:[^\[\]]|\n)*?\]', t)
+              if not m:
+                  print('no archives block in', p); continue
+              io.open(p, 'w', encoding='utf-8', newline='\n').write(t[:m.start()] + block + t[m.end():])
+              print('restored', p)
+          PY
+          echo "=== 切到 fuxi_full_defconfig ==="
+          ./unixnu defconfig fuxi_full_defconfig 2>&1 | tail -5
+          echo "=== 第二遍编内核（可能失败，日志会推回） ==="
+          ./unixnu build kernel 2>&1 | tee /tmp/build-kernel2.log | tail -30
+          echo "exit=$?"
+
       - name: 官方 build payload
         if: success()
         working-directory: unixnu
