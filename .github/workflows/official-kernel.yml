@@ -157,12 +157,21 @@ jobs:
           set -o pipefail
           ./unixnu build kernel 2>&1 | tee /tmp/build-kernel.log
 
+      - name: 官方 build payload
+        if: success()
+        working-directory: unixnu
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -o pipefail
+          ./unixnu build payload 2>&1 | tee /tmp/build-payload.log | tail -40
+
       - name: 列出产物
         if: always()
         working-directory: unixnu
         run: |
           echo "===== 产物 ====="
-          find . -maxdepth 7 \( -name 'mach.*' -o -name 'kernel.*' -o -name '*.cpo.json' \) 2>/dev/null | head -40
+          find . -maxdepth 7 \( -name 'mach.*' -o -name 'kernel.*' -o -name 'payload.img' -o -name 'payload.json' -o -name 'boot.img' \) 2>/dev/null | head -40
           ls -la build 2>/dev/null | head -20
 
       - name: 上传内核
@@ -184,7 +193,11 @@ jobs:
           mkdir -p ci-logs-official
           cp /tmp/build-kernel.log ci-logs-official/build-kernel.log 2>/dev/null
           # unixnu 把详细日志写在自己的目录里，一并带走
-          mkdir -p ci-logs-official/unixnu-logs
+          mkdir -p ci-logs-official/unixnu-logs ci-logs-official/out
+          cp ../unixnu/out/fuxi/payload/payload.img ci-logs-official/out/ 2>/dev/null
+          cp ../unixnu/out/fuxi/payload/payload.json ci-logs-official/out/ 2>/dev/null
+          cp ../unixnu/out/fuxi/kernel/kernel.macho ci-logs-official/out/ 2>/dev/null
+          cp /tmp/build-payload.log ci-logs-official/ 2>/dev/null
           cp -r ../unixnu/out/fuxi/logs/. ci-logs-official/unixnu-logs/ 2>/dev/null || true
           ls -la ci-logs-official/unixnu-logs 2>/dev/null | head -10
           {
