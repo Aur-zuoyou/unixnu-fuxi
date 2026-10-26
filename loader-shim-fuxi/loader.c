@@ -349,19 +349,6 @@ const char *loader_boot(uintptr_t dtb)
 		con_str("XNU", "bar drawn; jumping now");
 	}
 
-	/* DIAGNOSTIC: prove instruction fetch at the XNU entry. */
-	{
-		volatile uint32_t *ep = (volatile uint32_t *)entry_pa;
-		uint32_t saved = *ep;
-		*ep = 0xD65F03C0u; /* ret */
-		dc_civac_range((uintptr_t)ep, (uintptr_t)ep + 4);
-		__asm__ volatile("dsb sy; ic iallu; dsb sy; isb" ::: "memory");
-		con_str("TEST", "entry RET; calling");
-		((xnu_entry_t)entry_pa)(ba_pa);
-		con_str("TEST", "entry RET returned");
-		*ep = saved;
-		dc_civac_range((uintptr_t)ep, (uintptr_t)ep + 4);
-		__asm__ volatile("dsb sy; ic iallu; dsb sy; isb" ::: "memory");
-	}
-	return "entry ret ok";
+	((xnu_entry_t)entry_pa)(ba_pa);
+	return "xnu returned";
 }
