@@ -987,7 +987,6 @@ ProbeEntry (
   )
 {
   EFI_STATUS                     Status;
-  EFI_EVENT                      Event;
   EFI_GRAPHICS_OUTPUT_PROTOCOL  *Gop = NULL;
   UINTN                          i;
 
@@ -1039,9 +1038,7 @@ ProbeEntry (
   }
   Fill (0xFF00FF00);
 
-  Status = gBS->CreateEvent (EVT_NOTIFY_SIGNAL, TPL_CALLBACK, OnTextOut, NULL, &Event);
-  if (EFI_ERROR (Status)) {
-    Halt ();
-  }
-  return gBS->RegisterProtocolNotify (&gEfiSimpleTextOutProtocolGuid, Event, &(VOID *){0});
+  /* fuxi: do not wait for BDS/SimpleTextOut; the boot menu has no working input. */
+  OnTextOut (NULL, NULL);
+  return EFI_SUCCESS;
 }
