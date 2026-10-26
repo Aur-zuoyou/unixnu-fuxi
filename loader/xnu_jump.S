@@ -94,24 +94,7 @@ AsmXnuJump:
     isb
     dsb     sy
 
-    // ---------------- MARKER_AFTER_MMU_OFF ----------------
-    // MMU 已关，先往帧缓冲左上角画一块 64x64 的绿色方块。
-    // 看到绿色 = 关 MMU 之后的写显存正常 -> 问题只剩 br 指令。
-    movz    x5, #0xB000, lsl #16
-    movz    x6, #0x1C00
-    movk    x6, #0x2, lsl #16          // 128 行 * 1080
-    mov     w7, #0x0000FF00
-3:
-    str     w7, [x5], #4
-    subs    x6, x6, #1
-    b.ne    3b
-    dsb     sy
-
-    // fuxi probe: do not jump yet, spin here to isolate the MMU-off write test
-5:
-    wfi
-    b       5b
-
+    // 真正的 XNU 跳转：x0 = boot_args
     mov     x0, x4
     br      x3
 .size   AsmXnuJump, . - AsmXnuJump
