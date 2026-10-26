@@ -1,9 +1,8 @@
+diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 --- a/osfmk/arm64/start.s
 +++ b/osfmk/arm64/start.s
-@@ -1041,6 +1041,23 @@
- 	mov	lr, x21
- #endif
- 
+@@ -1043,2 +1043,19 @@
+ 	// Return to arm_init()
 +	/* 0058 fuxi start.s complete marker @ y=840 */
 +	MOV64	x0, (0xB8000000 + 840 * 4320)
 +	mov	w1, #-1
@@ -21,6 +20,4 @@
 +	b.ne	Lfuxi_startdone_row
 +	dsb	sy
 +
- 	// Return to arm_init()
  	ret
- 
