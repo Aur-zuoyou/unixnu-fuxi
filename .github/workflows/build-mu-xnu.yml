@@ -1,0 +1,144 @@
+name: build-mu-xnu
+
+# Mu 路线一键产出：Mu-fuxi-xnu.img —— 固件(FV) + XNU payload(FAT) 全打包，
+# 产物可直接 fastboot flash boot_a / boot_b 刷入。
+#
+# 流水线：uefi-sheng + 本仓库 fuxiPkg 编固件 → 生成 payload FAT16
+#         (kernel / kernel.adt / EFI/UniXNU/unixnu.toml) → 拼
+#         BootShim(192) + FV(3MiB) + FAT(17MiB) → gzip → +fuxi.dtb
+#         → mkbootimg(header v0, os_version 13.0.0) → Mu-fuxi-xnu.img
+#
+# 用法：fork 仓库 Actions 页 → build-mu-xnu → Run workflow → 下载产物。
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+
+    steps:
+      - name: 取本仓库（rom/xnu 内核 + tools + uefi-fuxi-pkg）
+        uses: actions/checkout@v4
+        with:
+          path: ourrepo
+
+      - name: 克隆 uefi-sheng 并覆盖 fuxiPkg
+        env:
+          UNIXNU_ROOT: ${{ github.workspace }}/UniXNU
+        run: |
+          set -eux
+          git clone --depth 1 https://github.com/UniXNU/uefi-sheng uefi
+          cd uefi
+          git submodule update --init --depth 1 \
+            Common/Mu Common/Mu_OEM_Sample Mu_Basecore Silicium-ACPI \
+            Silicon/Silicium/OpensslPkg/Library/OpensslLib/openssl
+          cp -rv "$GITHUB_WORKSPACE/ourrepo/uefi-fuxi-pkg/." .
+          ls -l Platforms/Xiaomi/fuxiPkg/fuxi.dsc Resources/Configs/fuxi.toml
+          ./setup_env.sh -p apt
+
+      - name: 克隆 UniXNU + DarwinBoot（版本钉 85332b3，新版起不来）
+        env:
+          UNIXNU_ROOT: ${{ github.workspace }}/UniXNU
+        run: |
+          set -eux
+          git clone --depth 1 https://github.com/UniXNU/UniXNU "$UNIXNU_ROOT"
+          mkdir -p "$UNIXNU_ROOT/drivers"
+          git clone https://github.com/UniXNU/DarwinBoot "$UNIXNU_ROOT/drivers/DarwinBoot"
+          git -C "$UNIXNU_ROOT/drivers/DarwinBoot" checkout -q 85332b3
+
+      - name: 编 UEFI 固件（产出 SILICIUM_UEFI.fd + Mu-fuxi*.img）
+        env:
+          UNIXNU_ROOT: ${{ github.workspace }}/UniXNU
+        run: |
+          cd uefi
+          set +e
+          ./build_uefi.py -d fuxi -r DEBUG -c > build.log 2>&1
+          rc=$?
+          set -e
+          tail -80 build.log
+          exit $rc
+
+      - name: 校验 FV 尺寸（必须正好 3MiB，否则 payload 窗口错位）
+        run: |
+          set -e
+          FD=$(ls uefi/Build/fuxiPkg/*/FV/SILICIUM_UEFI.fd | head -1)
+          echo "FV=$FD size=$(stat -c%s "$FD")"
+          test "$(stat -c%s "$FD")" -eq 3145728
+
+      - name: 从 Mu-fuxi.img 提取 BootShim(192B) + 真机 dtb
+        run: |
+          set -e
+          IMG=$(ls uefi/Mu-fuxi*.img | head -1)
+          echo "IMG=$IMG"
+          python3 - "$IMG" <<'PY'
+          import gzip, io, struct, sys
+          data = open(sys.argv[1], 'rb').read()
+          assert data[:8] == b'ANDROID!', 'not an Android boot.img'
+          page = struct.unpack_from('<I', data, 36)[0]
+          ksize = struct.unpack_from('<I', data, 8)[0]
+          blob = data[page:page + ksize]
+          bio = io.BytesIO(blob)
+          dec = io.BytesIO()
+          with gzip.GzipFile(fileobj=bio) as g:
+              dec.write(g.read())
+          dtb = blob[bio.tell():]
+          raw = dec.getvalue()
+          assert len(raw) >= 192 + 0x300000, 'unexpected payload layout: %d' % len(raw)
+          assert len(dtb) > 1024, 'dtb too small: %d' % len(dtb)
+          open('BootShim.bin', 'wb').write(raw[:192])
+          open('fuxi-real.dtb', 'wb').write(dtb)
+          print('BootShim=192 dtb=%d raw=%d' % (len(dtb), len(raw)))
+          PY
+
+      - name: 生成 payload FAT16（kernel + kernel.adt + unixnu.toml）
+        run: |
+          set -e
+          python3 ourrepo/tools/mkfat.py payload.fat 17 \
+            "kernel=ourrepo/rom/xnu/kernel.development.fuxi" \
+            "kernel.adt=ourrepo/rom/xnu/fuxi.adt" \
+            "EFI/UniXNU/unixnu.toml=ourrepo/tools/unixnu.toml"
+          echo "FAT size=$(stat -c%s payload.fat) (应为 17825792)"
+          test "$(stat -c%s payload.fat)" -eq $((17 * 1024 * 1024))
+          # FuxiRamDiskDxe 要求 FAT 引导扇区首字节 0xEB
+          test "$(head -c 1 payload.fat | od -An -tu1 | tr -d ' ')" = "235"
+
+      - name: 组装并打包 Mu-fuxi-xnu.img
+        run: |
+          set -e
+          FD=$(ls uefi/Build/fuxiPkg/*/FV/SILICIUM_UEFI.fd | head -1)
+          cat BootShim.bin "$FD" payload.fat > payload.bin
+          test "$(stat -c%s payload.bin)" -eq $((192 + 0x300000 + 0x1100000))
+          gzip -n -c payload.bin > payload.gz
+          cat payload.gz fuxi-real.dtb > kernel-blob
+          : > empty-ramdisk
+          python3 uefi/Resources/Scripts/mkbootimg.py \
+            --kernel kernel-blob --ramdisk empty-ramdisk \
+            --base 0x00000000 --kernel_offset 0x00008000 --tags_offset 0x01e00000 \
+            --pagesize 4096 --header_version 0 \
+            --os_version 13.0.0 --os_patch_level 2022-11 \
+            -o Mu-fuxi-xnu.img
+          ls -l Mu-fuxi-xnu.img
+          python3 - <<'PY'
+          import struct
+          d = open('Mu-fuxi-xnu.img', 'rb').read()
+          print('Mu-fuxi-xnu.img: %d bytes, kernel_size=%d, os_version=0x%08X' % (
+              len(d),
+              struct.unpack_from('<I', d, 8)[0],
+              struct.unpack_from('<I', d, 0x2C)[0]))
+          PY
+
+      - name: 上传产物
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mu-fuxi-xnu
+          path: |
+            Mu-fuxi-xnu.img
+            uefi/build.log
+          if-no-files-found: warn
+          retention-days: 14
