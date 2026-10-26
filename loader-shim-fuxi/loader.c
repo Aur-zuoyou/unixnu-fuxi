@@ -232,8 +232,6 @@ const char *loader_boot(uintptr_t dtb)
 
 	uintptr_t entry_pa = p->entry_va + pa_of_va_base;
 	con_hex("JUMP-RAW", entry_pa);
-	/* fuxi: all physical addresses used here are below 2^32. */
-	entry_pa &= 0xFFFFFFFFULL;
 	con_hex2("JUMP", "lo=", (uint32_t)entry_pa, "hi=", (uint32_t)(entry_pa >> 32));
 
 	/* 跳转前确认：入口处真的是代码吗？MMU 真的是关的吗？ */
