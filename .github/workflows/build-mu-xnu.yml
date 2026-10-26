@@ -3,9 +3,10 @@ name: build-mu-xnu
 # Mu 路线一键产出：Mu-fuxi-xnu.img —— 固件(FV) + XNU payload(FAT) 全打包，
 # 产物可直接 fastboot flash boot_a / boot_b 刷入。
 #
-# 流水线：uefi-sheng + 本仓库 fuxiPkg 编固件 → 生成 payload FAT16
+# 流水线：uefi-sheng + 本仓库 fuxiPkg 编固件（build_uefi.py 已产出
+#         BootShim.bin 和 SILICIUM_UEFI.fd）→ mkfat.py 生成 payload FAT16
 #         (kernel / kernel.adt / EFI/UniXNU/unixnu.toml) → 拼
-#         BootShim(192) + FV(3MiB) + FAT(17MiB) → gzip → +fuxi.dtb
+#         BootShim(192) + FV(3MiB) + FAT(17MiB) → gzip → + fuxi.dtb
 #         → mkbootimg(header v0, os_version 13.0.0) → Mu-fuxi-xnu.img
 #
 # 用法：fork 仓库 Actions 页 → build-mu-xnu → Run workflow → 下载产物。
@@ -51,7 +52,7 @@ jobs:
           git clone https://github.com/UniXNU/DarwinBoot "$UNIXNU_ROOT/drivers/DarwinBoot"
           git -C "$UNIXNU_ROOT/drivers/DarwinBoot" checkout -q 85332b3
 
-      - name: 编 UEFI 固件（产出 SILICIUM_UEFI.fd + Mu-fuxi*.img）
+      - name: 编 UEFI 固件（产出 SILICIUM_UEFI.fd + BootShim.bin）
         env:
           UNIXNU_ROOT: ${{ github.workspace }}/UniXNU
         run: |
@@ -63,37 +64,19 @@ jobs:
           tail -80 build.log
           exit $rc
 
-      - name: 校验 FV 尺寸（必须正好 3MiB，否则 payload 窗口错位）
+      - name: 校验固件原料（FV=3MiB、BootShim=192B、dtb 存在）
         run: |
           set -e
           FD=$(ls uefi/Build/fuxiPkg/*/FV/SILICIUM_UEFI.fd | head -1)
           echo "FV=$FD size=$(stat -c%s "$FD")"
           test "$(stat -c%s "$FD")" -eq 3145728
-
-      - name: 从 Mu-fuxi.img 提取 BootShim(192B) + 真机 dtb
-        run: |
-          set -e
-          IMG=$(ls uefi/Mu-fuxi*.img | head -1)
-          echo "IMG=$IMG"
-          python3 - "$IMG" <<'PY'
-          import gzip, io, struct, sys
-          data = open(sys.argv[1], 'rb').read()
-          assert data[:8] == b'ANDROID!', 'not an Android boot.img'
-          page = struct.unpack_from('<I', data, 36)[0]
-          ksize = struct.unpack_from('<I', data, 8)[0]
-          blob = data[page:page + ksize]
-          bio = io.BytesIO(blob)
-          dec = io.BytesIO()
-          with gzip.GzipFile(fileobj=bio) as g:
-              dec.write(g.read())
-          dtb = blob[bio.tell():]
-          raw = dec.getvalue()
-          assert len(raw) >= 192 + 0x300000, 'unexpected payload layout: %d' % len(raw)
-          assert len(dtb) > 1024, 'dtb too small: %d' % len(dtb)
-          open('BootShim.bin', 'wb').write(raw[:192])
-          open('fuxi-real.dtb', 'wb').write(dtb)
-          print('BootShim=192 dtb=%d raw=%d' % (len(dtb), len(raw)))
-          PY
+          SHIM=uefi/BootShim/BootShim.bin
+          echo "BootShim=$SHIM size=$(stat -c%s "$SHIM")"
+          test "$(stat -c%s "$SHIM")" -eq 192
+          DTB=uefi/Resources/DTBs/fuxi.dtb
+          echo "DTB=$DTB size=$(stat -c%s "$DTB")"
+          test "$(stat -c%s "$DTB")" -gt 100000
+          echo "$FD" > fv-path.txt
 
       - name: 生成 payload FAT16（kernel + kernel.adt + unixnu.toml）
         run: |
@@ -110,11 +93,11 @@ jobs:
       - name: 组装并打包 Mu-fuxi-xnu.img
         run: |
           set -e
-          FD=$(ls uefi/Build/fuxiPkg/*/FV/SILICIUM_UEFI.fd | head -1)
-          cat BootShim.bin "$FD" payload.fat > payload.bin
+          FD=$(cat fv-path.txt)
+          cat uefi/BootShim/BootShim.bin "$FD" payload.fat > payload.bin
           test "$(stat -c%s payload.bin)" -eq $((192 + 0x300000 + 0x1100000))
           gzip -n -c payload.bin > payload.gz
-          cat payload.gz fuxi-real.dtb > kernel-blob
+          cat payload.gz uefi/Resources/DTBs/fuxi.dtb > kernel-blob
           : > empty-ramdisk
           python3 uefi/Resources/Scripts/mkbootimg.py \
             --kernel kernel-blob --ramdisk empty-ramdisk \
