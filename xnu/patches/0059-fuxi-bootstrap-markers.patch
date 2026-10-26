@@ -1,0 +1,95 @@
+--- a/osfmk/arm64/start.s
++++ b/osfmk/arm64/start.s
+@@ -619,6 +619,28 @@
+ 	subs	x2, x2, #1							//   entries--
+ 	b.ne	Linvalidate_bootstrap				// } while (entries != 0)
+ 
++	/* 0059 fuxi bootstrap marker inval @ y=230 */
++	stp	x0, x1, [sp, #-16]!
++	stp	x2, x3, [sp, #-16]!
++	stp	x4, x5, [sp, #-16]!
++	MOV64	x0, (0xB8000000 + 230 * 4320)
++	mov	w1, #-1
++	mov	x2, #24
++	mov	x4, #4320
++Lfuxi_inval_row:
++	mov	x3, #200
++	mov	x5, x0
++Lfuxi_inval_pixel:
++	str	w1, [x5], #4
++	subs	x3, x3, #1
++	b.ne	Lfuxi_inval_pixel
++	add	x0, x0, x4
++	subs	x2, x2, #1
++	b.ne	Lfuxi_inval_row
++	dsb	sy
++	ldp	x4, x5, [sp], #16
++	ldp	x2, x3, [sp], #16
++	ldp	x0, x1, [sp], #16
+ 	/*
+ 	 * In order to reclaim memory on targets where TZ0 (or some other entity)
+ 	 * must be located at the base of memory, iBoot may set the virtual and
+@@ -692,10 +714,54 @@
+ 	/* create_bootstrap_mapping(vbase, pbase, num_ents, L1 table, freeptr) */
+ 	create_bootstrap_mapping x0,  x4,  x5, x1, x2, x6, x10, x11, x12, x13
+ 
++	/* 0059 fuxi bootstrap marker map1 @ y=270 */
++	stp	x0, x1, [sp, #-16]!
++	stp	x2, x3, [sp, #-16]!
++	stp	x4, x5, [sp, #-16]!
++	MOV64	x0, (0xB8000000 + 270 * 4320)
++	mov	w1, #-1
++	mov	x2, #24
++	mov	x4, #4320
++Lfuxi_map1_row:
++	mov	x3, #200
++	mov	x5, x0
++Lfuxi_map1_pixel:
++	str	w1, [x5], #4
++	subs	x3, x3, #1
++	b.ne	Lfuxi_map1_pixel
++	add	x0, x0, x4
++	subs	x2, x2, #1
++	b.ne	Lfuxi_map1_row
++	dsb	sy
++	ldp	x4, x5, [sp], #16
++	ldp	x2, x3, [sp], #16
++	ldp	x0, x1, [sp], #16
+ 	/* Setup the KVA bootstrap mapping */
+ 	lsr		x5,  x24, #(ARM_TT_L2_SHIFT)
+ 	create_bootstrap_mapping x14, x15, x5, x3, x2, x9, x10, x11, x12, x13
+ 
++	/* 0059 fuxi bootstrap marker map2 @ y=310 */
++	stp	x0, x1, [sp, #-16]!
++	stp	x2, x3, [sp, #-16]!
++	stp	x4, x5, [sp, #-16]!
++	MOV64	x0, (0xB8000000 + 310 * 4320)
++	mov	w1, #-1
++	mov	x2, #24
++	mov	x4, #4320
++Lfuxi_map2_row:
++	mov	x3, #200
++	mov	x5, x0
++Lfuxi_map2_pixel:
++	str	w1, [x5], #4
++	subs	x3, x3, #1
++	b.ne	Lfuxi_map2_pixel
++	add	x0, x0, x4
++	subs	x2, x2, #1
++	b.ne	Lfuxi_map2_row
++	dsb	sy
++	ldp	x4, x5, [sp], #16
++	ldp	x2, x3, [sp], #16
++	ldp	x0, x1, [sp], #16
+ #if defined(ARM64_BOARD_CONFIG_FUXI)
+ 	/*
+ 	 * Splash framebuffer: one 32MB Normal-NC block in the EXISTING V=P
+@@ -883,7 +949,7 @@
+ 
+ 	// Enable caches, MMU, ROP and JOP
+ 	/* 0047 probe B: solid bar at y=1300 */
+-	MOV64	x0, (0xB8000000 + 1300 * 4320)
++	MOV64	x0, (0xB8000000 + 380 * 4320)
+ 	mov	w1, #-1
+ 	mov	x2, #24
+ 	mov	x4, #4320
