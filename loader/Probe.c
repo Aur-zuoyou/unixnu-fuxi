@@ -40,6 +40,7 @@ extern VOID         XnuBootRun (CONST VOID *, UINTN, UINTN, UINTN, UINT32, UINT3
                                 VOID (*)(CONST CHAR8 *, UINT64));
 
 extern VOID         HackiosLoaderInit (EFI_HANDLE ImageHandle);
+extern VOID         HackiosLoaderStart (EFI_HANDLE ImageHandle);
 extern BOOLEAN      HackiosLoaderPending (VOID);
 
 
@@ -1055,5 +1056,19 @@ ProbeEntry (
   if (EFI_ERROR (Status)) {
     Halt ();
   }
-  return gBS->RegisterProtocolNotify (&gEfiSimpleTextOutProtocolGuid, Event, &(VOID *){0});
+  Status = gBS->RegisterProtocolNotify (
+                   &gEfiSimpleTextOutProtocolGuid,
+                   Event,
+                   &(VOID *){0}
+                   );
+  if (EFI_ERROR (Status)) {
+    return Status;
+  }
+
+  /* Keep FuxiProbe resident.  Do not return to BDS: a timer callback from an
+     unloaded image is exactly what caused the synchronous exception. */
+  gBS->Stall (5000000);
+  HackiosLoaderStart (ImageHandle);
+  CpuDeadLoop ();
+  return EFI_SUCCESS;
 }
