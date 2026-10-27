@@ -20,6 +20,8 @@
   XnuUfs.c
   xnu_jump.S
   xnu_payload.S
+  HackiosLoader.c
+  hackios_loader_blob.c
   fuxi_dtb.c
   kernel_blob.c
 
