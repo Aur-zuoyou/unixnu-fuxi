@@ -25,7 +25,7 @@ on:
   workflow_dispatch:
 
 env:
-  PAYLOAD_ENABLED: "on"   # 诊断: off=不嵌 XNU
+  PAYLOAD_ENABLED: "off"   # 诊断: off=不嵌 XNU
 
 permissions:
   contents: read
@@ -174,7 +174,7 @@ jobs:
           # 所以把探针编进固件, 由 BDS 自动加载, 不需要任何按键。
           probe=edk2-msm/Platform/Xiaomi/sm8550/probe
           mkdir -p "$probe"
-          cp loader/Probe.c loader/Probe.inf \
+          cp loader/Probe.c loader/Probe.inf loader/HackiosLoader.c loader/hackios_loader_blob.c \
              loader/XnuBoot.c loader/XnuLoad.c loader/XnuMem.c loader/XnuMmu.c loader/XnuFv.c loader/XnuUfs.c loader/xnu_jump.S loader/xnu_payload.S "$probe"/
           # 把真机导出的设备树编进驱动：这版固件不把 DT 放进 EFI 配置表，
           # 所以内核启动时只能靠我们自带的一份。
@@ -274,6 +274,19 @@ jobs:
           tail -150 build.log
           cp build.log ../build.log
           exit $rc
+
+      - name: Package full-XNUP xnu-usb.img
+        run: |
+          set -euo pipefail
+          test -f rom/xnu/kernel.development.fuxi
+          python3 tools/mkxnu_payload.py -o rom/xnu/xnup-full.bin \
+            kernel=rom/xnu/kernel.development.fuxi --cmdline=-v
+          python3 tools/mkfuxiboot_fuxi.py \
+            --input edk2-msm/boot-fuxi.img \
+            --xnup rom/xnu/xnup-full.bin \
+            --output edk2-msm/xnu-usb.img
+          ls -lh edk2-msm/boot-fuxi.img edk2-msm/xnu-usb.img rom/xnu/xnup-full.bin
+          sha256sum edk2-msm/xnu-usb.img rom/xnu/xnup-full.bin
 
       - name: 诊断（结果写进 diag.txt, 随 artifact 下载）
         if: always()
@@ -385,6 +398,8 @@ jobs:
           name: fuxi-uefi-${{ github.run_number }}
           path: |
             edk2-msm/boot-fuxi.img
+            edk2-msm/xnu-usb.img
+            rom/xnu/xnup-full.bin
             edk2-msm/uefi-fuxi*.img
             edk2-msm/diag.txt
             edk2-msm/version.txt
