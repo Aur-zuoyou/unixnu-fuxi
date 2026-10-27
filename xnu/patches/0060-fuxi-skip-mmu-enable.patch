@@ -1,0 +1,11 @@
+--- a/osfmk/arm64/start.s
++++ b/osfmk/arm64/start.s
+@@ -1026,7 +1026,7 @@
+ 	b.ne	Lfuxi_dumpbarB_row
+ 	dsb	sy
+ 	MOV64   x0, SCTLR_EL1_DEFAULT
+-	MSR_SCTLR_EL1_X0
++	nop	/* 0060: temporary skip MMU enable to locate hang */
+ 	isb		sy
+ 	/* 0049 probe C: after MMU enable, y=1100 */
+ 	MOV64	x2, (0xB8000000 + 1100 * 4320)
