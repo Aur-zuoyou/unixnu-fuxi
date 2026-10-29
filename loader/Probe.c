@@ -1050,7 +1050,7 @@ ProbeEntry (
       }
     }
   }
-  /* 32-bit B800 blue-only test, no loader. */
+  /* 32-bit B800 blue background, then silence UEFI ConOut before loader. */
   mFb       = (UINT8 *)(UINTN) 0xB8000000ULL;
   mFbSize   = (UINTN) 1080 * 2400 * 4;
   mFbW      = 1080;
@@ -1058,6 +1058,10 @@ ProbeEntry (
   mFbPitch  = 1080;
   Fill (0xFF0000FF);
 
+  if (gST != NULL) {
+    gST->ConOut = NULL;
+  }
+  HackiosLoaderStart (ImageHandle);
   CpuDeadLoop ();
   return EFI_SUCCESS;
 }
