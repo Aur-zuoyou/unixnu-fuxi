@@ -29,6 +29,7 @@ STATIC BOOLEAN     mHackiosArmed;
 #define LOADER_PATCH_GIC_OFF      0xaa78u
 #define LOADER_PATCH_REDIST_OFF   0xaa80u
 #define LOADER_PATCH_SMALL_OFF    0xaaa4u
+#define LOADER_PATCH_REBOOT_OFF   0x1a44u
 #define LOADER_EXPECTED_SIZE      68096u
 
 STATIC
@@ -95,6 +96,13 @@ HackiosLoaderImage (
   CopyMem (Image + LOADER_PATCH_REDIST_OFF, &Gic64, sizeof (Gic64));
   Small = 0x07;
   CopyMem (Image + LOADER_PATCH_SMALL_OFF, &Small, sizeof (Small));
+
+  /* Stop xnuloader's reboot() instead of resetting into ABL/fastboot. */
+  {
+    UINT32  Loop = 0x14000000u;  /* b . */
+    CopyMem (Image + LOADER_PATCH_REBOOT_OFF, &Loop, sizeof (Loop));
+  }
+
 
   /* Keep the Gic variable used on compilers that warn about it. */
   Gic = 0;
