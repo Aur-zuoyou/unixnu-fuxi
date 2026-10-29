@@ -1050,16 +1050,14 @@ ProbeEntry (
       }
     }
   }
-  Fill (0xFF00FF00);
-
-  /* Stage marker: blue means Probe reached the loader hand-off, red means
-     the 5 s settle delay finished and HackiosLoaderStart is about to run.
-     These fills deliberately do not use ConOut, which may be redirected. */
-  Fill (0xFF0000FF);
-
-  gBS->Stall (5000000);
+  /* Raw fuxi splash framebuffer test: bypass GOP. */
+  mFb       = (UINT8 *)(UINTN) 0xB8000000ULL;
+  mFbSize   = (UINTN) 1080 * 2400 * 4;
+  mFbW      = 1080;
+  mFbH      = 2400;
+  mFbPitch  = 1080;
   Fill (0xFFFF0000);
-  HackiosLoaderStart (ImageHandle);
+
   CpuDeadLoop ();
   return EFI_SUCCESS;
 }
