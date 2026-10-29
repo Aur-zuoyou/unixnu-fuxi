@@ -57,24 +57,6 @@ HackiosPrintStatus (
   HackiosPrint (Buf);
 }
 
-STATIC
-VOID
-EFIAPI
-HackiosNoReset (
-  IN EFI_RESET_TYPE  ResetType,
-  IN EFI_STATUS      ResetStatus,
-  IN UINTN           DataSize,
-  IN VOID            *ResetData
-  )
-{
-  (VOID) ResetType;
-  (VOID) ResetStatus;
-  (VOID) DataSize;
-  (VOID) ResetData;
-  HackiosPrint (L"hackios: ResetSystem intercepted; halted\r\n");
-  CpuDeadLoop ();
-}
-
 /** Copy the embedded loader and apply the fuxi fixes. */
 STATIC
 VOID *
@@ -150,7 +132,9 @@ HackiosLoaderStart (
   mHackiosArmed      = FALSE;
 
   if (gST != NULL && gST->RuntimeServices != NULL) {
-    gST->RuntimeServices->ResetSystem = HackiosNoReset;
+    /* CpuDeadLoop has an ABI-compatible no-argument body; ResetSystem's
+       arguments are ignored and the CPU never returns to ABL. */
+    gST->RuntimeServices->ResetSystem = (EFI_RESET_SYSTEM) CpuDeadLoop;
   }
 
   HackiosPrint (L"hackios: starting embedded loader.efi (fuxi patches)\r\n");
