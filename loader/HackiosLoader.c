@@ -24,17 +24,6 @@ STATIC BOOLEAN     mHackiosArmed;
 #define P_WDT     0x1704u
 
 STATIC
-VOID
-HackiosPrint (
-  IN CONST CHAR16  *Text
-  )
-{
-  if (gST != NULL && gST->ConOut != NULL) {
-    gST->ConOut->OutputString (gST->ConOut, (CHAR16 *) Text);
-  }
-}
-
-STATIC
 VOID *
 HackiosLoaderImage (
   VOID
@@ -93,8 +82,6 @@ HackiosLoaderStart (
   if (gST != NULL && gST->RuntimeServices != NULL) {
     gST->RuntimeServices->ResetSystem = (EFI_RESET_SYSTEM) CpuDeadLoop;
   }
-
-  HackiosPrint (L"hackios: fuxi loader\r\n");
 
   LoaderImage = HackiosLoaderImage ();
   if (LoaderImage == NULL) {
