@@ -90,6 +90,9 @@ HackiosLoaderStart (
   mParentImageHandle = ImageHandle;
   mHackiosArmed      = FALSE;
 
+  /* Probe-only diagnostic: stop before embedded loader. */
+  CpuDeadLoop ();
+
   if (gST != NULL && gST->RuntimeServices != NULL) {
     gST->RuntimeServices->ResetSystem = (EFI_RESET_SYSTEM) CpuDeadLoop;
   }
