@@ -24,6 +24,17 @@ STATIC BOOLEAN     mHackiosArmed;
 #define P_WDT     0x1704u
 
 STATIC
+VOID
+HackiosPrint (
+  IN CONST CHAR16  *Text
+  )
+{
+  if (gST != NULL && gST->ConOut != NULL) {
+    gST->ConOut->OutputString (gST->ConOut, (CHAR16 *) Text);
+  }
+}
+
+STATIC
 VOID *
 HackiosLoaderImage (
   VOID
@@ -83,6 +94,7 @@ HackiosLoaderStart (
     gST->RuntimeServices->ResetSystem = (EFI_RESET_SYSTEM) CpuDeadLoop;
   }
 
+  HackiosPrint (L"H\r\n");
   LoaderImage = HackiosLoaderImage ();
   if (LoaderImage == NULL) {
     CpuDeadLoop ();
@@ -91,11 +103,14 @@ HackiosLoaderStart (
   Status = gBS->LoadImage (FALSE, mParentImageHandle, NULL, LoaderImage,
                            (UINTN) gHackiosLoaderSize, &LoaderHandle);
   if (EFI_ERROR (Status)) {
+    HackiosPrint (L"E\r\n");
     CpuDeadLoop ();
   }
 
+  HackiosPrint (L"S\r\n");
   Status = gBS->StartImage (LoaderHandle, NULL, NULL);
   (VOID) Status;
+  HackiosPrint (L"R\r\n");
   CpuDeadLoop ();
 }
 
