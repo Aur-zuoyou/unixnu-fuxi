@@ -109,6 +109,11 @@ HackiosLoaderStart (
 
   mParentImageHandle = ImageHandle;
   mHackiosArmed      = FALSE;
+
+  /* Fill-only diagnostic: never call LoadImage/StartImage. */
+  HackiosFill (0xFF00FFFF);  /* cyan */
+  CpuDeadLoop ();
+
   HackiosFill (0xFFFF0000);  /* red: entered loader */
 
   if (gST != NULL && gST->RuntimeServices != NULL) {
