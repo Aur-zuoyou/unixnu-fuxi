@@ -35,6 +35,26 @@ HackiosPrint (
 }
 
 STATIC
+VOID
+HackiosFill (
+  IN UINT32  Color
+  )
+{
+  volatile UINT32  *P;
+  UINTN             I;
+  UINTN             N;
+
+  P = (volatile UINT32 *)(UINTN) 0xB8000000ULL;
+  N = (UINTN) 1080 * 2400;
+  for (I = 0; I < N; I++) {
+    P[I] = Color;
+  }
+  for (I = 0; I < N; I += 16) {
+    P[I] = P[I];
+  }
+}
+
+STATIC
 VOID *
 HackiosLoaderImage (
   VOID
@@ -89,6 +109,7 @@ HackiosLoaderStart (
 
   mParentImageHandle = ImageHandle;
   mHackiosArmed      = FALSE;
+  HackiosFill (0xFFFF0000);  /* red: entered loader */
 
   if (gST != NULL && gST->RuntimeServices != NULL) {
     gST->RuntimeServices->ResetSystem = (EFI_RESET_SYSTEM) CpuDeadLoop;
@@ -97,8 +118,11 @@ HackiosLoaderStart (
   HackiosPrint (L"H\r\n");
   LoaderImage = HackiosLoaderImage ();
   if (LoaderImage == NULL) {
+    HackiosFill (0xFFFF00FF);  /* magenta: image preparation failed */
     CpuDeadLoop ();
   }
+
+  HackiosFill (0xFFFFFF00);    /* yellow: calling LoadImage */
 
   Status = gBS->LoadImage (FALSE, mParentImageHandle, NULL, LoaderImage,
                            (UINTN) gHackiosLoaderSize, &LoaderHandle);
