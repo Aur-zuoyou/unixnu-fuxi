@@ -30,6 +30,7 @@ STATIC BOOLEAN     mHackiosArmed;
 #define LOADER_PATCH_REDIST_OFF   0xaa80u
 #define LOADER_PATCH_SMALL_OFF    0xaaa4u
 #define LOADER_PATCH_REBOOT_OFF   0x1a44u
+#define LOADER_PATCH_WDT_OFF      0x1704u
 #define LOADER_EXPECTED_SIZE      68096u
 
 STATIC
@@ -54,6 +55,24 @@ HackiosPrintStatus (
 
   UnicodeSPrint (Buf, sizeof (Buf), L"hackios: %s: %r\r\n", What, Status);
   HackiosPrint (Buf);
+}
+
+STATIC
+VOID
+EFIAPI
+HackiosNoReset (
+  IN EFI_RESET_TYPE  ResetType,
+  IN EFI_STATUS      ResetStatus,
+  IN UINTN           DataSize,
+  IN VOID            *ResetData
+  )
+{
+  (VOID) ResetType;
+  (VOID) ResetStatus;
+  (VOID) DataSize;
+  (VOID) ResetData;
+  HackiosPrint (L"hackios: ResetSystem intercepted; halted\r\n");
+  CpuDeadLoop ();
 }
 
 /** Copy the embedded loader and apply the fuxi fixes. */
@@ -103,6 +122,12 @@ HackiosLoaderImage (
     CopyMem (Image + LOADER_PATCH_REBOOT_OFF, &Loop, sizeof (Loop));
   }
 
+  /* Skip the inlined hypervisor watchdog arm; it resets after 30 s. */
+  {
+    UINT32  SkipWdt = 0x14000037u;  /* b 0xa10023e0 */
+    CopyMem (Image + LOADER_PATCH_WDT_OFF, &SkipWdt, sizeof (SkipWdt));
+  }
+
 
   /* Keep the Gic variable used on compilers that warn about it. */
   Gic = 0;
@@ -123,6 +148,10 @@ HackiosLoaderStart (
 
   mParentImageHandle = ImageHandle;
   mHackiosArmed      = FALSE;
+
+  if (gST != NULL && gST->RuntimeServices != NULL) {
+    gST->RuntimeServices->ResetSystem = HackiosNoReset;
+  }
 
   HackiosPrint (L"hackios: starting embedded loader.efi (fuxi patches)\r\n");
   HackiosPrint (L"hackios: XNUP payload is expected at 0xF0000000 (ramdisk)\r\n");
