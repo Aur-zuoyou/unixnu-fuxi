@@ -1058,9 +1058,6 @@ ProbeEntry (
   mFbPitch  = 1080;
   Fill (0xFF0000FF);
 
-  if (gST != NULL) {
-    gST->ConOut = NULL;
-  }
   HackiosLoaderStart (ImageHandle);
   CpuDeadLoop ();
   return EFI_SUCCESS;

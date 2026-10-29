@@ -127,14 +127,17 @@ HackiosLoaderStart (
   Status = gBS->LoadImage (FALSE, mParentImageHandle, NULL, LoaderImage,
                            (UINTN) gHackiosLoaderSize, &LoaderHandle);
   if (EFI_ERROR (Status)) {
-    HackiosPrint (L"E\r\n");
+    HackiosFill (0xFFFF00FF);  /* magenta: LoadImage failed */
     CpuDeadLoop ();
   }
 
-  HackiosPrint (L"S\r\n");
+  HackiosFill (0xFF00FFFF);    /* cyan: LoadImage OK, starting image */
+  if (gST != NULL) {
+    gST->ConOut = NULL;       /* silence loader ConOut only after LoadImage */
+  }
   Status = gBS->StartImage (LoaderHandle, NULL, NULL);
   (VOID) Status;
-  HackiosPrint (L"R\r\n");
+  HackiosFill (0xFF00FF00);    /* green: StartImage returned */
   CpuDeadLoop ();
 }
 
