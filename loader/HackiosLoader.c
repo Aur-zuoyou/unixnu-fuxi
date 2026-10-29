@@ -1,14 +1,6 @@
 /** @file  HackiosLoader.c
-  Fuxi bring-up shim: patch and start HackiOS prebuilt/loader.efi.
-
-  The prebuilt loader in the repository is an old redwood/QEMU build.  It only
-  recognises the redwood framebuffer and falls into its QEMU fw_cfg path on
-  fuxi (writing 0x09020008).  We copy the embedded PE image to a writable pool
-  buffer and patch it for fuxi before LoadImage:
-    - NOP the "not redwood" branch at file offset 0x1654
-    - patch platform_redwood GIC fields to fuxi SM8550 values
-  The complete XNUP payload is supplied in the Android boot image's ramdisk
-  field; this code does not touch 0xF0000000.
+  Fuxi loader shim.  Keeps the UEFI image small enough for ABL's 0x650000
+  boot-image limit while patching the old embedded loader for fuxi.
 
   SPDX-License-Identifier: BSD-2-Clause-Patent
 **/
@@ -17,7 +9,6 @@
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/BaseLib.h>
 #include <Library/BaseMemoryLib.h>
-#include <Library/PrintLib.h>
 
 extern CONST UINT8   gHackiosLoaderData[];
 extern CONST UINT32  gHackiosLoaderSize;
@@ -25,13 +16,12 @@ extern CONST UINT32  gHackiosLoaderSize;
 STATIC EFI_HANDLE  mParentImageHandle;
 STATIC BOOLEAN     mHackiosArmed;
 
-#define LOADER_PATCH_BRANCH_OFF   0x1654u
-#define LOADER_PATCH_GIC_OFF      0xaa78u
-#define LOADER_PATCH_REDIST_OFF   0xaa80u
-#define LOADER_PATCH_SMALL_OFF    0xaaa4u
-#define LOADER_PATCH_REBOOT_OFF   0x1a44u
-#define LOADER_PATCH_WDT_OFF      0x1704u
-#define LOADER_EXPECTED_SIZE      68096u
+#define P_BRANCH  0x1654u
+#define P_GIC     0xaa78u
+#define P_REDIST  0xaa80u
+#define P_SMALL   0xaaa4u
+#define P_REBOOT  0x1a44u
+#define P_WDT     0x1704u
 
 STATIC
 VOID
@@ -45,20 +35,6 @@ HackiosPrint (
 }
 
 STATIC
-VOID
-HackiosPrintStatus (
-  IN CONST CHAR16  *What,
-  IN EFI_STATUS     Status
-  )
-{
-  CHAR16  Buf[160];
-
-  UnicodeSPrint (Buf, sizeof (Buf), L"hackios: %s: %r\r\n", What, Status);
-  HackiosPrint (Buf);
-}
-
-/** Copy the embedded loader and apply the fuxi fixes. */
-STATIC
 VOID *
 HackiosLoaderImage (
   VOID
@@ -66,59 +42,42 @@ HackiosLoaderImage (
 {
   EFI_STATUS  Status;
   UINT8       *Image;
-  UINT32      Gic;
-  UINT64      Gic64;
-  UINT32      Small;
+  UINT64      Value;
+  UINT32      Word;
 
-  if (gHackiosLoaderSize != LOADER_EXPECTED_SIZE) {
-    HackiosPrint (L"hackios: unexpected embedded loader size\r\n");
+  if (gHackiosLoaderSize != 68096u) {
     return NULL;
   }
 
   Image = NULL;
   Status = gBS->AllocatePool (EfiLoaderData, gHackiosLoaderSize, (VOID **) &Image);
   if (EFI_ERROR (Status) || Image == NULL) {
-    HackiosPrintStatus (L"AllocatePool(loader)", Status);
     return NULL;
   }
 
   CopyMem (Image, (VOID *) gHackiosLoaderData, gHackiosLoaderSize);
 
-  /* The old loader's conditional branch goes to the QEMU fw_cfg path. */
-  Image[LOADER_PATCH_BRANCH_OFF + 0] = 0x1f;
-  Image[LOADER_PATCH_BRANCH_OFF + 1] = 0x20;
-  Image[LOADER_PATCH_BRANCH_OFF + 2] = 0x03;
-  Image[LOADER_PATCH_BRANCH_OFF + 3] = 0xd5;
+  Word = 0x14000000u;                 /* reboot(): b . */
+  CopyMem (Image + P_REBOOT, &Word, sizeof (Word));
 
-  /* platform_redwood: GIC distributor/redistributor and fuxi little cores. */
-  Gic64 = 0x0000000017100000ULL;
-  CopyMem (Image + LOADER_PATCH_GIC_OFF, &Gic64, sizeof (Gic64));
-  Gic64 = 0x0000000017180000ULL;
-  CopyMem (Image + LOADER_PATCH_REDIST_OFF, &Gic64, sizeof (Gic64));
-  Small = 0x07;
-  CopyMem (Image + LOADER_PATCH_SMALL_OFF, &Small, sizeof (Small));
+  Word = 0x14000037u;                 /* skip inlined watchdog arm */
+  CopyMem (Image + P_WDT, &Word, sizeof (Word));
 
-  /* Stop xnuloader's reboot() instead of resetting into ABL/fastboot. */
-  {
-    UINT32  Loop = 0x14000000u;  /* b . */
-    CopyMem (Image + LOADER_PATCH_REBOOT_OFF, &Loop, sizeof (Loop));
-  }
+  Image[P_BRANCH + 0] = 0x1f;         /* NOP the fw_cfg branch */
+  Image[P_BRANCH + 1] = 0x20;
+  Image[P_BRANCH + 2] = 0x03;
+  Image[P_BRANCH + 3] = 0xd5;
 
-  /* Skip the inlined hypervisor watchdog arm; it resets after 30 s. */
-  {
-    UINT32  SkipWdt = 0x14000037u;  /* b 0xa10023e0 */
-    CopyMem (Image + LOADER_PATCH_WDT_OFF, &SkipWdt, sizeof (SkipWdt));
-  }
-
-
-  /* Keep the Gic variable used on compilers that warn about it. */
-  Gic = 0;
-  (VOID) Gic;
+  Value = 0x17100000ULL;
+  CopyMem (Image + P_GIC, &Value, sizeof (Value));
+  Value = 0x17180000ULL;
+  CopyMem (Image + P_REDIST, &Value, sizeof (Value));
+  Word = 7;
+  CopyMem (Image + P_SMALL, &Word, sizeof (Word));
 
   return Image;
 }
 
-/** Synchronously load and start the embedded HackiOS loader. */
 VOID
 HackiosLoaderStart (
   IN EFI_HANDLE  ImageHandle
@@ -132,38 +91,27 @@ HackiosLoaderStart (
   mHackiosArmed      = FALSE;
 
   if (gST != NULL && gST->RuntimeServices != NULL) {
-    /* CpuDeadLoop has an ABI-compatible no-argument body; ResetSystem's
-       arguments are ignored and the CPU never returns to ABL. */
     gST->RuntimeServices->ResetSystem = (EFI_RESET_SYSTEM) CpuDeadLoop;
   }
 
-  HackiosPrint (L"hackios: starting embedded loader.efi (fuxi patches)\r\n");
-  HackiosPrint (L"hackios: XNUP payload is expected at 0xF0000000 (ramdisk)\r\n");
+  HackiosPrint (L"hackios: fuxi loader\r\n");
 
   LoaderImage = HackiosLoaderImage ();
   if (LoaderImage == NULL) {
     CpuDeadLoop ();
   }
 
-  Status = gBS->LoadImage (
-                   FALSE,
-                   mParentImageHandle,
-                   NULL,
-                   LoaderImage,
-                   (UINTN) gHackiosLoaderSize,
-                   &LoaderHandle
-                   );
+  Status = gBS->LoadImage (FALSE, mParentImageHandle, NULL, LoaderImage,
+                           (UINTN) gHackiosLoaderSize, &LoaderHandle);
   if (EFI_ERROR (Status)) {
-    HackiosPrintStatus (L"LoadImage(loader.efi)", Status);
     CpuDeadLoop ();
   }
 
   Status = gBS->StartImage (LoaderHandle, NULL, NULL);
-  HackiosPrintStatus (L"loader.efi returned", Status);
+  (VOID) Status;
   CpuDeadLoop ();
 }
 
-/** Mark the old Probe path as inactive and remember the parent image. */
 VOID
 HackiosLoaderInit (
   IN EFI_HANDLE  ImageHandle
@@ -173,7 +121,6 @@ HackiosLoaderInit (
   mHackiosArmed      = TRUE;
 }
 
-/** TRUE while the old Probe/ExitBootServices path must stay out of the way. */
 BOOLEAN
 HackiosLoaderPending (
   VOID
