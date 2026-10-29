@@ -1052,22 +1052,13 @@ ProbeEntry (
   }
   Fill (0xFF00FF00);
 
-  Status = gBS->CreateEvent (EVT_NOTIFY_SIGNAL, TPL_CALLBACK, OnTextOut, NULL, &Event);
-  if (EFI_ERROR (Status)) {
-    Halt ();
-  }
-  Status = gBS->RegisterProtocolNotify (
-                   &gEfiSimpleTextOutProtocolGuid,
-                   Event,
-                   &(VOID *){0}
-                   );
-  if (EFI_ERROR (Status)) {
-    return Status;
-  }
+  /* Stage marker: blue means Probe reached the loader hand-off, red means
+     the 5 s settle delay finished and HackiosLoaderStart is about to run.
+     These fills deliberately do not use ConOut, which may be redirected. */
+  Fill (0xFF0000FF);
 
-  /* Keep FuxiProbe resident.  Do not return to BDS: a timer callback from an
-     unloaded image is exactly what caused the synchronous exception. */
   gBS->Stall (5000000);
+  Fill (0xFFFF0000);
   HackiosLoaderStart (ImageHandle);
   CpuDeadLoop ();
   return EFI_SUCCESS;
