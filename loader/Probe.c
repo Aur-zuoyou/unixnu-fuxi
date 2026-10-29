@@ -405,38 +405,6 @@ Fill (
   SweepFb ();
 }
 
-STATIC
-VOID
-Fill24Bars (
-  VOID
-  )
-{
-  volatile UINT8  *P;
-  UINTN            X;
-  UINTN            Y;
-  UINT32           Color;
-  UINT32           Stride;
-
-  /* Try packed BGR888: byte order B,G,R; 1080*3 = 3240. */
-  Stride = 1080 * 3;
-  P      = (volatile UINT8 *)(UINTN) 0xB8000000ULL;
-  for (Y = 0; Y < 2400; Y++) {
-    if (Y < 800) {
-      Color = 0x0000FF;      /* BGR red */
-    } else if (Y < 1600) {
-      Color = 0x00FF00;      /* BGR green */
-    } else {
-      Color = 0xFF0000;      /* BGR blue */
-    }
-    for (X = 0; X < 1080; X++) {
-      P[Y * Stride + X * 3 + 0] = (UINT8)(Color & 0xFF);
-      P[Y * Stride + X * 3 + 1] = (UINT8)((Color >> 8) & 0xFF);
-      P[Y * Stride + X * 3 + 2] = (UINT8)((Color >> 16) & 0xFF);
-    }
-  }
-  gBS->Stall (1000000);
-}
-
 STATIC __attribute__((unused))
 VOID
 DrawRect (
@@ -1082,7 +1050,14 @@ ProbeEntry (
       }
     }
   }
-  Fill24Bars ();
+  /* 32-bit B800 blue-only test, no loader. */
+  mFb       = (UINT8 *)(UINTN) 0xB8000000ULL;
+  mFbSize   = (UINTN) 1080 * 2400 * 4;
+  mFbW      = 1080;
+  mFbH      = 2400;
+  mFbPitch  = 1080;
+  Fill (0xFF0000FF);
+
   CpuDeadLoop ();
   return EFI_SUCCESS;
 }
